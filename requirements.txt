@@ -11,6 +11,7 @@ langgraph
 langgraph-checkpoint-postgres
 
 langchain-tavily
+tavily-python
 
 psycopg[binary]
 psycopg_pool
