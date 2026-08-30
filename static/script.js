@@ -26,8 +26,10 @@ function updateThreadDisplay() {
 
     if (currentThreadId) {
         if (threadBadge) threadBadge.classList.remove("hidden");
-        if (threadBadgeText) threadBadgeText.textContent = `Thread: ${currentThreadId.slice(0, 10)}...`;
-        if (threadInfo) threadInfo.textContent = `Session ID: ${currentThreadId}`;
+        if (threadBadgeText)
+            threadBadgeText.textContent = `Thread: ${currentThreadId.slice(0, 10)}...`;
+        if (threadInfo)
+            threadInfo.textContent = `Session ID: ${currentThreadId}`;
     } else {
         if (threadBadge) threadBadge.classList.add("hidden");
         if (threadInfo) threadInfo.textContent = "Session ID: New";
@@ -38,7 +40,10 @@ function updateThreadDisplay() {
 // 1. SESSION RESTORATION (DATABASE FETCH)
 // ==============================================================================
 
-async function restoreSessionFromDatabase(threadId, showToastNotification = true) {
+async function restoreSessionFromDatabase(
+    threadId,
+    showToastNotification = true,
+) {
     if (!threadId) return;
 
     try {
@@ -78,7 +83,9 @@ async function restoreSessionFromDatabase(threadId, showToastNotification = true
 
 function getHistoryList() {
     try {
-        return JSON.parse(localStorage.getItem("travel_history_sessions") || "[]");
+        return JSON.parse(
+            localStorage.getItem("travel_history_sessions") || "[]",
+        );
     } catch (e) {
         return [];
     }
@@ -90,14 +97,15 @@ function saveTripToHistory(threadId, userQuery, updateBadge = true) {
     let history = getHistoryList();
 
     // Remove existing item with same thread_id to bring it to the top
-    history = history.filter(item => item.thread_id !== threadId);
+    history = history.filter((item) => item.thread_id !== threadId);
 
-    const title = userQuery.length > 60 ? userQuery.slice(0, 57) + "..." : userQuery;
+    const title =
+        userQuery.length > 60 ? userQuery.slice(0, 57) + "..." : userQuery;
 
     history.unshift({
         thread_id: threadId,
         title: title || "Custom Travel Plan",
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
     });
 
     // Limit to 30 recent trips
@@ -106,7 +114,7 @@ function saveTripToHistory(threadId, userQuery, updateBadge = true) {
     }
 
     localStorage.setItem("travel_history_sessions", JSON.stringify(history));
-    
+
     if (updateBadge) {
         updateHistoryCountBadge();
     }
@@ -162,23 +170,27 @@ function renderHistoryList() {
         return;
     }
 
-    historyContainer.innerHTML = history.map(item => {
-        const dateStr = new Date(item.timestamp).toLocaleDateString('en-US', {
-            month: 'short',
-            day: 'numeric',
-            year: 'numeric'
-        });
-        const isActive = item.thread_id === currentThreadId;
+    historyContainer.innerHTML = history
+        .map((item) => {
+            const dateStr = new Date(item.timestamp).toLocaleDateString(
+                "en-US",
+                {
+                    month: "short",
+                    day: "numeric",
+                    year: "numeric",
+                },
+            );
+            const isActive = item.thread_id === currentThreadId;
 
-        return `
-            <div class="history-card ${isActive ? 'active-session' : ''}" onclick="selectHistoryTrip('${item.thread_id}')">
+            return `
+            <div class="history-card ${isActive ? "active-session" : ""}" onclick="selectHistoryTrip('${item.thread_id}')">
                 <div class="history-card-content">
                     <div class="history-card-title">${escapeHtml(item.title)}</div>
                     <div class="history-card-meta">
                         <span>📅 ${dateStr}</span>
                         <span>•</span>
-                        <span style="${isActive ? 'color: #86efac; font-weight: 700;' : ''}">
-                            ${isActive ? '🟢 Active Plan' : 'Session: ' + item.thread_id.slice(0, 8)}
+                        <span style="${isActive ? "color: #86efac; font-weight: 700;" : ""}">
+                            ${isActive ? "🟢 Active Plan" : "Session: " + item.thread_id.slice(0, 8)}
                         </span>
                     </div>
                 </div>
@@ -187,7 +199,8 @@ function renderHistoryList() {
                 </button>
             </div>
         `;
-    }).join('');
+        })
+        .join("");
 }
 
 function selectHistoryTrip(threadId) {
@@ -199,7 +212,7 @@ function deleteHistoryTrip(threadId, event) {
     if (event) event.stopPropagation();
 
     let history = getHistoryList();
-    history = history.filter(item => item.thread_id !== threadId);
+    history = history.filter((item) => item.thread_id !== threadId);
     localStorage.setItem("travel_history_sessions", JSON.stringify(history));
 
     updateHistoryCountBadge();
@@ -251,7 +264,9 @@ function resetSession() {
     // Hide active result & errors on main view
     document.getElementById("resultSection").classList.add("hidden");
     hideError();
-    showToast("✨ Ready for a new trip! Your past plans are safe in Trip History.");
+    showToast(
+        "✨ Ready for a new trip! Your past plans are safe in Trip History.",
+    );
 }
 
 function setPrompt(text) {
@@ -284,10 +299,22 @@ function startAgentProgress() {
     const liveStatusText = document.getElementById("liveStatusText");
 
     const steps = [
-        { id: "step-flight", text: "✈️ Flight Agent: Scanning real-time routes & schedules..." },
-        { id: "step-hotel", text: "🏨 Hotel Agent: Discovering top accommodations via Tavily..." },
-        { id: "step-itinerary", text: "🗺️ Itinerary Agent: Synthesizing day-by-day travel plan..." },
-        { id: "step-final", text: "✨ Final Synthesizer: Polishing recommendations & budget..." }
+        {
+            id: "step-flight",
+            text: "✈️ Flight Agent: Scanning real-time routes & schedules...",
+        },
+        {
+            id: "step-hotel",
+            text: "🏨 Hotel Agent: Discovering top accommodations via Tavily...",
+        },
+        {
+            id: "step-itinerary",
+            text: "🗺️ Itinerary Agent: Synthesizing day-by-day travel plan...",
+        },
+        {
+            id: "step-final",
+            text: "✨ Final Synthesizer: Polishing recommendations & budget...",
+        },
     ];
 
     agentProgress.classList.remove("hidden");
@@ -419,7 +446,9 @@ async function sendMessage() {
     const message = input.value.trim();
 
     if (!message) {
-        showError("Please enter your destination or travel requirements first.");
+        showError(
+            "Please enter your destination or travel requirements first.",
+        );
         return;
     }
 
@@ -441,7 +470,8 @@ async function sendMessage() {
 
         if (!response.ok || !data.success) {
             throw new Error(
-                data.error || "Failed to generate travel plan. Please check server logs."
+                data.error ||
+                    "Failed to generate travel plan. Please check server logs.",
             );
         }
 
@@ -469,7 +499,9 @@ function copyResult() {
         .writeText(latestAnswerMarkdown)
         .then(() => {
             const copyBtnText = document.getElementById("copyBtnText");
-            const oldText = copyBtnText ? copyBtnText.textContent : "Copy Markdown";
+            const oldText = copyBtnText
+                ? copyBtnText.textContent
+                : "Copy Markdown";
 
             if (copyBtnText) copyBtnText.textContent = "Copied!";
             showToast("📋 Markdown copied to clipboard!");
@@ -492,7 +524,9 @@ function downloadPDF() {
     }
 
     const downloadBtnText = document.getElementById("downloadBtnText");
-    const oldText = downloadBtnText ? downloadBtnText.textContent : "Download PDF";
+    const oldText = downloadBtnText
+        ? downloadBtnText.textContent
+        : "Download PDF";
 
     if (downloadBtnText) downloadBtnText.textContent = "Preparing PDF...";
 
