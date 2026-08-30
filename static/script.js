@@ -20,8 +20,10 @@ function updateThreadDisplay() {
 
     if (currentThreadId) {
         if (threadBadge) threadBadge.classList.remove("hidden");
-        if (threadBadgeText) threadBadgeText.textContent = `Thread: ${currentThreadId.slice(0, 10)}...`;
-        if (threadInfo) threadInfo.textContent = `Session ID: ${currentThreadId}`;
+        if (threadBadgeText)
+            threadBadgeText.textContent = `Thread: ${currentThreadId.slice(0, 10)}...`;
+        if (threadInfo)
+            threadInfo.textContent = `Session ID: ${currentThreadId}`;
     } else {
         if (threadBadge) threadBadge.classList.add("hidden");
         if (threadInfo) threadInfo.textContent = "Session ID: New";
@@ -33,7 +35,7 @@ function resetSession() {
     localStorage.removeItem("travel_thread_id");
     updateThreadDisplay();
     clearInput();
-    
+
     // Hide previous result & errors
     document.getElementById("resultSection").classList.add("hidden");
     hideError();
@@ -69,18 +71,30 @@ function showToast(message, duration = 3000) {
 function startAgentProgress() {
     const agentProgress = document.getElementById("agentProgress");
     const liveStatusText = document.getElementById("liveStatusText");
-    
+
     const steps = [
-        { id: "step-flight", text: "✈️ Flight Agent: Scanning real-time routes & schedules..." },
-        { id: "step-hotel", text: "🏨 Hotel Agent: Discovering top accommodations via Tavily..." },
-        { id: "step-itinerary", text: "🗺️ Itinerary Agent: Synthesizing day-by-day travel plan..." },
-        { id: "step-final", text: "✨ Final Synthesizer: Polishing recommendations & budget..." }
+        {
+            id: "step-flight",
+            text: "✈️ Flight Agent: Scanning real-time routes & schedules...",
+        },
+        {
+            id: "step-hotel",
+            text: "🏨 Hotel Agent: Discovering top accommodations via Tavily...",
+        },
+        {
+            id: "step-itinerary",
+            text: "🗺️ Itinerary Agent: Synthesizing day-by-day travel plan...",
+        },
+        {
+            id: "step-final",
+            text: "✨ Final Synthesizer: Polishing recommendations & budget...",
+        },
     ];
 
     agentProgress.classList.remove("hidden");
 
     // Reset step styles
-    steps.forEach(s => {
+    steps.forEach((s) => {
         const el = document.getElementById(s.id);
         if (el) {
             el.classList.remove("active", "completed");
@@ -181,7 +195,7 @@ function showResult(answer, threadId) {
     const pdfMetaDate = document.getElementById("pdfMetaDate");
 
     if (pdfMetaDate) {
-        pdfMetaDate.textContent = `Generated: ${new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`;
+        pdfMetaDate.textContent = `Generated: ${new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`;
     }
 
     if (typeof marked !== "undefined") {
@@ -195,7 +209,7 @@ function showResult(answer, threadId) {
     resultSection.classList.remove("hidden");
     resultSection.scrollIntoView({
         behavior: "smooth",
-        block: "start"
+        block: "start",
     });
 }
 
@@ -206,7 +220,9 @@ async function sendMessage() {
     const message = input.value.trim();
 
     if (!message) {
-        showError("Please enter your destination or travel requirements first.");
+        showError(
+            "Please enter your destination or travel requirements first.",
+        );
         return;
     }
 
@@ -216,25 +232,27 @@ async function sendMessage() {
         const response = await fetch("/api/travel", {
             method: "POST",
             headers: {
-                "Content-Type": "application/json"
+                "Content-Type": "application/json",
             },
             body: JSON.stringify({
                 message: message,
-                thread_id: currentThreadId
-            })
+                thread_id: currentThreadId,
+            }),
         });
 
         const data = await response.json();
 
         if (!response.ok || !data.success) {
-            throw new Error(data.error || "Failed to generate travel plan. Please check server logs.");
+            throw new Error(
+                data.error ||
+                    "Failed to generate travel plan. Please check server logs.",
+            );
         }
 
         currentThreadId = data.thread_id;
         localStorage.setItem("travel_thread_id", currentThreadId);
 
         showResult(data.answer, data.thread_id);
-
     } catch (error) {
         showError(error.message);
     } finally {
@@ -248,10 +266,13 @@ function copyResult() {
         return;
     }
 
-    navigator.clipboard.writeText(latestAnswerMarkdown)
+    navigator.clipboard
+        .writeText(latestAnswerMarkdown)
         .then(() => {
             const copyBtnText = document.getElementById("copyBtnText");
-            const oldText = copyBtnText ? copyBtnText.textContent : "Copy Markdown";
+            const oldText = copyBtnText
+                ? copyBtnText.textContent
+                : "Copy Markdown";
 
             if (copyBtnText) copyBtnText.textContent = "Copied!";
             showToast("📋 Markdown copied to clipboard!");
@@ -274,7 +295,9 @@ function downloadPDF() {
     }
 
     const downloadBtnText = document.getElementById("downloadBtnText");
-    const oldText = downloadBtnText ? downloadBtnText.textContent : "Download PDF";
+    const oldText = downloadBtnText
+        ? downloadBtnText.textContent
+        : "Download PDF";
 
     if (downloadBtnText) downloadBtnText.textContent = "Preparing PDF...";
 
@@ -283,21 +306,21 @@ function downloadPDF() {
         filename: `TripMate-Plan-${new Date().toISOString().slice(0, 10)}.pdf`,
         image: {
             type: "jpeg",
-            quality: 0.98
+            quality: 0.98,
         },
         html2canvas: {
             scale: 2,
             useCORS: true,
-            backgroundColor: "#ffffff"
+            backgroundColor: "#ffffff",
         },
         jsPDF: {
             unit: "in",
             format: "a4",
-            orientation: "portrait"
+            orientation: "portrait",
         },
         pagebreak: {
-            mode: ["avoid-all", "css", "legacy"]
-        }
+            mode: ["avoid-all", "css", "legacy"],
+        },
     };
 
     html2pdf()
@@ -315,7 +338,7 @@ function downloadPDF() {
 }
 
 // Keyboard Shortcut: Ctrl+Enter / Cmd+Enter to submit
-document.addEventListener("keydown", function(event) {
+document.addEventListener("keydown", function (event) {
     if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
         sendMessage();
     }
