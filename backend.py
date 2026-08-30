@@ -178,7 +178,7 @@ _conn = psycopg.connect(
 checkpointer = PostgresSaver(_conn)
 checkpointer.setup()
 
-wokrflow = graph.compile(checkpointer=checkpointer)
+workflow = graph.compile(checkpointer=checkpointer)
 
 def run_travel_agent(user_input: str, thread_id: str | None = None):
     if not thread_id:
@@ -190,7 +190,7 @@ def run_travel_agent(user_input: str, thread_id: str | None = None):
         }
     }
 
-    result = wokrflow.invoke(
+    result = workflow.invoke(
         {
             "messages": [
                 HumanMessage(content=user_input)

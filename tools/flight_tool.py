@@ -420,7 +420,8 @@ def parse_route(query: str) -> Tuple[Optional[str], Optional[str]]:
     """
     q = query.strip()
     q_lower = q.lower()
-    default_origin = os.getenv("DEFAULT_ORIGIN_IATA")
+    raw_default_origin = os.getenv("DEFAULT_ORIGIN_IATA") or os.getenv("DEFAULT_ORIGIN_DATA") or "DEL"
+    default_origin = resolve_location_to_iata(raw_default_origin)
 
     # 1. Global / all-country query detection
     global_keywords = [
@@ -556,7 +557,7 @@ def search_flights(
     Returns:
         Formatted string containing flight status and schedule information.
     """
-    api_key = os.getenv("AVIATIONSTACK_API_KEY")
+    api_key = os.getenv("AVIATIONSTACK_API_KEY") or os.getenv("AVIATION_STACK_API_KEY")
     if not api_key:
         return (
             "Flight API error: AVIATIONSTACK_API_KEY is missing.\n"
