@@ -213,3 +213,38 @@ def run_travel_agent(user_input: str, thread_id: str | None = None):
             "itinerary": result.get("itinerary", ""),
             "llm_calls": result.get("llm_calls", 0),
         }
+
+
+def get_travel_session(thread_id: str):
+    """
+    Retrieves the latest state of a saved travel conversation from PostgreSQL checkpointer.
+    """
+    if not thread_id:
+        return None
+
+    config = {
+        "configurable": {
+            "thread_id": thread_id
+        }
+    }
+
+    with PostgresSaver.from_conn_string(DATABASE_URL) as checkpointer:
+        app_workflow = graph.compile(checkpointer=checkpointer)
+        state = app_workflow.get_state(config)
+
+        if not state or not state.values:
+            return None
+
+        values = state.values
+        messages = values.get("messages", [])
+        final_answer = messages[-1].content if messages else ""
+
+        return {
+            "thread_id": thread_id,
+            "answer": final_answer,
+            "user_query": values.get("user_query", ""),
+            "flight_results": values.get("flight_results", ""),
+            "hotel_results": values.get("hotel_results", ""),
+            "itinerary": values.get("itinerary", ""),
+            "llm_calls": values.get("llm_calls", 0),
+        }

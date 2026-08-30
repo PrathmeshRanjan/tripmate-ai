@@ -16,7 +16,7 @@ from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 
 # Import the core LangGraph multi-agent travel planner execution pipeline
-from backend import run_travel_agent
+from backend import run_travel_agent, get_travel_session
 
 # Locate the root directory to safely resolve static files and templates
 BASE_DIR = Path(__file__).resolve().parent
@@ -116,6 +116,43 @@ async def travel_planner(request_data: TravelRequest):
     except Exception as e:
         # Log stack trace to server console for debugging
         print("ERROR:", e)
+        traceback.print_exc()
+
+        return JSONResponse(
+            status_code=500,
+            content={
+                "success": False,
+                "error": str(e)
+            }
+        )
+
+
+@app.get("/api/travel/session/{thread_id}")
+async def get_session(thread_id: str):
+    """
+    Restores the latest saved travel plan state from Postgres for a given session/thread_id.
+    """
+    try:
+        session_data = get_travel_session(thread_id)
+
+        if not session_data or not session_data.get("answer"):
+            return JSONResponse(
+                status_code=404,
+                content={
+                    "success": False,
+                    "error": "Session not found or has no saved plan."
+                }
+            )
+
+        return JSONResponse(
+            content={
+                "success": True,
+                **session_data
+            }
+        )
+
+    except Exception as e:
+        print("ERROR restoring session:", e)
         traceback.print_exc()
 
         return JSONResponse(
