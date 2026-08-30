@@ -12,7 +12,7 @@ let progressInterval = null;
 document.addEventListener("DOMContentLoaded", () => {
     updateThreadDisplay();
     updateHistoryCountBadge();
-    
+
     // Automatically restore the previously active trip plan if available
     if (currentThreadId) {
         restoreSessionFromDatabase(currentThreadId, false);
@@ -48,11 +48,16 @@ async function restoreSessionFromDatabase(threadId, showToastNotification = true
         if (response.ok && data.success && data.answer) {
             currentThreadId = threadId;
             localStorage.setItem("travel_thread_id", threadId);
-            
+
             // Populate user query in input if empty
             const input = document.getElementById("userInput");
             if (input && data.user_query && !input.value) {
                 input.value = data.user_query;
+            }
+
+            // Ensure this trip is recorded in our local history list
+            if (data.user_query) {
+                saveTripToHistory(threadId, data.user_query, false);
             }
 
             showResult(data.answer, data.thread_id, false);
@@ -79,29 +84,32 @@ function getHistoryList() {
     }
 }
 
-function saveTripToHistory(threadId, userQuery) {
-    if (!threadId) return;
+function saveTripToHistory(threadId, userQuery, updateBadge = true) {
+    if (!threadId || !userQuery) return;
 
     let history = getHistoryList();
-    
-    // Remove if already exists to bring to top
+
+    // Remove existing item with same thread_id to bring it to the top
     history = history.filter(item => item.thread_id !== threadId);
 
-    const title = userQuery.length > 55 ? userQuery.slice(0, 52) + "..." : userQuery;
-    
+    const title = userQuery.length > 60 ? userQuery.slice(0, 57) + "..." : userQuery;
+
     history.unshift({
         thread_id: threadId,
         title: title || "Custom Travel Plan",
         timestamp: new Date().toISOString()
     });
 
-    // Keep up to 25 recent trips
-    if (history.length > 25) {
-        history = history.slice(0, 25);
+    // Limit to 30 recent trips
+    if (history.length > 30) {
+        history = history.slice(0, 30);
     }
 
     localStorage.setItem("travel_history_sessions", JSON.stringify(history));
-    updateHistoryCountBadge();
+    
+    if (updateBadge) {
+        updateHistoryCountBadge();
+    }
 }
 
 function updateHistoryCountBadge() {
@@ -144,8 +152,11 @@ function renderHistoryList() {
     if (history.length === 0) {
         historyContainer.innerHTML = `
             <div class="history-empty">
-                <p>✈️ No saved trip plans yet.</p>
-                <p style="font-size: 0.82rem; margin-top: 6px;">Generated itineraries will automatically appear here.</p>
+                <p style="font-size: 1.5rem; margin-bottom: 8px;">🗺️</p>
+                <p><strong>No saved trips yet</strong></p>
+                <p style="font-size: 0.82rem; margin-top: 6px; color: #64748b;">
+                    When you generate an itinerary, it will be automatically saved here.
+                </p>
             </div>
         `;
         return;
@@ -166,10 +177,12 @@ function renderHistoryList() {
                     <div class="history-card-meta">
                         <span>📅 ${dateStr}</span>
                         <span>•</span>
-                        <span>${isActive ? '🟢 Active' : 'Session: ' + item.thread_id.slice(0, 8)}</span>
+                        <span style="${isActive ? 'color: #86efac; font-weight: 700;' : ''}">
+                            ${isActive ? '🟢 Active Plan' : 'Session: ' + item.thread_id.slice(0, 8)}
+                        </span>
                     </div>
                 </div>
-                <button class="history-card-delete" onclick="deleteHistoryTrip('${item.thread_id}', event)" title="Delete trip">
+                <button class="history-card-delete" onclick="deleteHistoryTrip('${item.thread_id}', event)" title="Delete from history">
                     ✕
                 </button>
             </div>
@@ -189,12 +202,16 @@ function deleteHistoryTrip(threadId, event) {
     history = history.filter(item => item.thread_id !== threadId);
     localStorage.setItem("travel_history_sessions", JSON.stringify(history));
 
+    updateHistoryCountBadge();
+    renderHistoryList();
+
     if (currentThreadId === threadId) {
-        resetSession();
-    } else {
-        updateHistoryCountBadge();
-        renderHistoryList();
+        currentThreadId = null;
+        localStorage.removeItem("travel_thread_id");
+        updateThreadDisplay();
+        document.getElementById("resultSection").classList.add("hidden");
     }
+
     showToast("🗑️ Trip removed from history.");
 }
 
@@ -204,7 +221,12 @@ function clearAllHistory() {
     }
 
     localStorage.removeItem("travel_history_sessions");
-    resetSession();
+    currentThreadId = null;
+    localStorage.removeItem("travel_thread_id");
+    updateThreadDisplay();
+    updateHistoryCountBadge();
+    document.getElementById("resultSection").classList.add("hidden");
+    clearInput();
     closeHistoryDrawer();
     showToast("✨ Cleared all trip history.");
 }
@@ -220,15 +242,16 @@ function escapeHtml(text) {
 // ==============================================================================
 
 function resetSession() {
+    // Start a new session without deleting history
     currentThreadId = null;
     localStorage.removeItem("travel_thread_id");
     updateThreadDisplay();
     clearInput();
-    
-    // Hide previous result & errors
+
+    // Hide active result & errors on main view
     document.getElementById("resultSection").classList.add("hidden");
     hideError();
-    showToast("✨ Started new travel planning session.");
+    showToast("✨ Ready for a new trip! Your past plans are safe in Trip History.");
 }
 
 function setPrompt(text) {
@@ -377,9 +400,10 @@ function showResult(answer, threadId, shouldScroll = true) {
     }
 
     updateThreadDisplay();
+    updateHistoryCountBadge();
 
     resultSection.classList.remove("hidden");
-    
+
     if (shouldScroll) {
         resultSection.scrollIntoView({
             behavior: "smooth",
@@ -424,7 +448,7 @@ async function sendMessage() {
         currentThreadId = data.thread_id;
         localStorage.setItem("travel_thread_id", currentThreadId);
 
-        // Save to past trips history
+        // Immediately record into history list
         saveTripToHistory(currentThreadId, message);
 
         showResult(data.answer, data.thread_id, true);
@@ -514,4 +538,3 @@ document.addEventListener("keydown", function (event) {
         sendMessage();
     }
 });
-
