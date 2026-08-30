@@ -169,18 +169,12 @@ graph.add_edge("final_agent", END)
 
 DATABASE_URL = get_database_url()
 
-_conn = psycopg.connect(
-    DATABASE_URL,
-    autocommit=True,
-    row_factory=dict_row
-)
-
-checkpointer = PostgresSaver(_conn)
-checkpointer.setup()
-
-workflow = graph.compile(checkpointer=checkpointer)
 
 def run_travel_agent(user_input: str, thread_id: str | None = None):
+    """
+    Executes the multi-agent travel planning graph with persistent PostgreSQL checkpointer.
+    Uses PostgresSaver.from_conn_string context manager to ensure fresh, live database connections.
+    """
     if not thread_id:
         thread_id = f"user_{uuid.uuid4().hex}"
 
@@ -190,27 +184,32 @@ def run_travel_agent(user_input: str, thread_id: str | None = None):
         }
     }
 
-    result = workflow.invoke(
-        {
-            "messages": [
-                HumanMessage(content=user_input)
-            ],
-            "user_query": user_input,
-            "flight_results": "",
-            "hotel_results": "",
-            "itinerary": "",
-            "llm_calls": 0
-        },
-        config=config
-    )
+    # Open a fresh, reliable connection to Postgres/Neon for each request
+    with PostgresSaver.from_conn_string(DATABASE_URL) as checkpointer:
+        checkpointer.setup()
+        app_workflow = graph.compile(checkpointer=checkpointer)
 
-    final_answer = result["messages"][-1].content
+        result = app_workflow.invoke(
+            {
+                "messages": [
+                    HumanMessage(content=user_input)
+                ],
+                "user_query": user_input,
+                "flight_results": "",
+                "hotel_results": "",
+                "itinerary": "",
+                "llm_calls": 0
+            },
+            config=config
+        )
 
-    return {
-        "thread_id": thread_id,
-        "answer": final_answer,
-        "flight_results": result.get("flight_results", ""),
-        "hotel_results": result.get("hotel_results", ""),
-        "itinerary": result.get("itinerary", ""),
-        "llm_calls": result.get("llm_calls", 0),
-    }
+        final_answer = result["messages"][-1].content
+
+        return {
+            "thread_id": thread_id,
+            "answer": final_answer,
+            "flight_results": result.get("flight_results", ""),
+            "hotel_results": result.get("hotel_results", ""),
+            "itinerary": result.get("itinerary", ""),
+            "llm_calls": result.get("llm_calls", 0),
+        }
