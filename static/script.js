@@ -301,19 +301,23 @@ function startAgentProgress() {
     const steps = [
         {
             id: "step-flight",
-            text: "✈️ Flight Agent: Scanning real-time routes & schedules...",
+            text: "✈️ Flight Agent: Scanning routes & schedules via AviationStack MCP...",
         },
         {
             id: "step-hotel",
-            text: "🏨 Hotel Agent: Discovering top accommodations via Tavily...",
+            text: "🏨 Hotel Agent: Discovering accommodations via Tavily MCP...",
+        },
+        {
+            id: "step-weather",
+            text: "🌤️ Weather Agent: Querying live conditions & forecast via FastMCP...",
         },
         {
             id: "step-itinerary",
-            text: "🗺️ Itinerary Agent: Synthesizing day-by-day travel plan...",
+            text: "🗺️ Itinerary Agent: Synthesizing day-by-day weather-aware itinerary...",
         },
         {
             id: "step-final",
-            text: "✨ Final Synthesizer: Polishing recommendations & budget...",
+            text: "✨ Final Synthesizer: Polishing recommendations, packing & budget...",
         },
     ];
 
@@ -354,9 +358,10 @@ function startAgentProgress() {
     let elapsed = 0;
     progressInterval = setInterval(() => {
         elapsed += 1;
-        if (elapsed === 3) updateStep(1);
-        else if (elapsed === 6) updateStep(2);
-        else if (elapsed === 9) updateStep(3);
+        if (elapsed === 2) updateStep(1);
+        else if (elapsed === 4) updateStep(2);
+        else if (elapsed === 6) updateStep(3);
+        else if (elapsed === 8) updateStep(4);
     }, 1000);
 }
 

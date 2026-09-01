@@ -30,7 +30,7 @@
                 <div class="logo-icon">✈️</div>
                 <div class="logo-text">
                     <span class="logo-title">TripMate <span class="gradient-text">AI</span></span>
-                    <span class="logo-badge">LangGraph Powered</span>
+                    <span class="logo-badge">LangGraph + Multi-Server MCP</span>
                 </div>
             </div>
 
@@ -56,7 +56,7 @@
 
                 <div class="status-pill">
                     <span class="status-dot"></span>
-                    <span>System Online</span>
+                    <span>MCP Hub Online</span>
                 </div>
             </div>
         </header>
@@ -64,17 +64,25 @@
         <!-- Hero Section -->
         <section class="hero-section">
             <div class="badge">
-                <span class="sparkle">✨</span> Autonomous Multi-Agent AI Travel Architecture
+                <span class="sparkle">✨</span> Model Context Protocol (MCP) Multi-Agent Architecture
             </div>
 
             <h1>
                 Plan Your Dream Trip <br class="desktop-only">
-                <span class="gradient-text">In Seconds with AI Agents</span>
+                <span class="gradient-text">With Autonomous MCP Agents</span>
             </h1>
 
             <p>
-                TripMate orchestrates autonomous agents for real-time flights, hotel discovery, and personalized itineraries with memory-backed persistence.
+                TripMate coordinates specialized agents over Model Context Protocol (MCP) for real-time flight routes, hotel discovery, live weather forecasting, and personalized itineraries with database persistence.
             </p>
+
+            <!-- MCP Stack Feature Indicators -->
+            <div class="mcp-badges-row">
+                <span class="mcp-chip"><span class="mcp-chip-dot"></span> <strong>AviationStack MCP</strong> (Flight Routes)</span>
+                <span class="mcp-chip"><span class="mcp-chip-dot"></span> <strong>Tavily MCP</strong> (Hotels & Stays)</span>
+                <span class="mcp-chip"><span class="mcp-chip-dot"></span> <strong>FastMCP Server</strong> (Live Weather & Forecasts)</span>
+                <span class="mcp-chip"><span class="mcp-chip-dot"></span> <strong>PostgreSQL</strong> (State Checkpoints)</span>
+            </div>
         </section>
 
         <!-- Planner Card / Input Area -->
@@ -93,7 +101,7 @@
             <div class="input-container">
                 <textarea
                     id="userInput"
-                    placeholder="E.g., Plan a 7-day trip to Japan from India in September under 2 lakhs including flights, boutique hotels, and cultural landmarks..."
+                    placeholder="E.g., Plan a 7-day trip to Japan from India in September under 2 lakhs including flights, boutique hotels, live weather packing advice, and cultural landmarks..."
                     rows="4"
                 ></textarea>
 
@@ -125,12 +133,17 @@
                 <div class="agent-steps">
                     <div class="step-item" id="step-flight">
                         <div class="step-icon">✈️</div>
-                        <div class="step-label">Flight Agent</div>
+                        <div class="step-label">Flight Agent (MCP)</div>
                     </div>
                     <div class="step-connector"></div>
                     <div class="step-item" id="step-hotel">
                         <div class="step-icon">🏨</div>
-                        <div class="step-label">Hotel Agent</div>
+                        <div class="step-label">Hotel Agent (MCP)</div>
+                    </div>
+                    <div class="step-connector"></div>
+                    <div class="step-item" id="step-weather">
+                        <div class="step-icon">🌤️</div>
+                        <div class="step-label">Weather Agent (FastMCP)</div>
                     </div>
                     <div class="step-connector"></div>
                     <div class="step-item" id="step-itinerary">
@@ -144,7 +157,7 @@
                     </div>
                 </div>
                 <div class="live-status-text" id="liveStatusText">
-                    🚀 Dispatching autonomous agents...
+                    🚀 Dispatching MCP autonomous agents...
                 </div>
             </div>
 
@@ -152,20 +165,17 @@
             <div class="quick-prompts-wrapper">
                 <span class="prompts-label">Quick Ideas:</span>
                 <div class="quick-prompts">
-                    <button class="prompt-chip" onclick="setPrompt('Plan a 7-day trip to Japan from India in September including flights, 4-star hotels, and cultural highlights.')">
+                    <button class="prompt-chip" onclick="setPrompt('Plan a 7-day trip to Japan from India in September including flights, 4-star hotels, live weather forecast, and cultural highlights.')">
                         🏯 7 Days in Japan
                     </button>
-                    <button class="prompt-chip" onclick="setPrompt('Plan a 5-day luxury vacation in Dubai from New York with beach resorts, desert safari, and fine dining.')">
+                    <button class="prompt-chip" onclick="setPrompt('Plan a 5-day vacation in Dubai with beach resorts, live weather check, desert safari, and fine dining.')">
                         🏖️ 5 Days in Dubai
                     </button>
-                    <button class="prompt-chip" onclick="setPrompt('Plan a 7-day budget backpacking trip to Thailand from London visiting Bangkok and Phuket.')">
-                        🎒 Budget Thailand Trip
+                    <button class="prompt-chip" onclick="setPrompt('Plan a 7-day budget trip to Thailand visiting Bangkok and Phuket with flight schedules and monsoon weather advice.')">
+                        🎒 Thailand with Weather
                     </button>
-                    <button class="prompt-chip" onclick="setPrompt('Plan a 10-day scenic road trip and romantic getaway in Switzerland and Italy from Paris.')">
+                    <button class="prompt-chip" onclick="setPrompt('Plan a 10-day scenic road trip in Switzerland and Italy with mountain weather forecasts and flight options.')">
                         🏔️ Switzerland & Italy Tour
-                    </button>
-                    <button class="prompt-chip" onclick="setPrompt('Show all available global live flights and airport connection highlights.')">
-                        🌐 Global Flights Check
                     </button>
                 </div>
             </div>
