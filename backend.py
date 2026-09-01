@@ -22,7 +22,7 @@ from mcp_client import (
 
 load_dotenv()
 
-llm = init_chat_model("mistralai:mistral-medium-latest")
+llm = init_chat_model("mistralai:mistral-small-latest")
 
 def get_database_url():
     database_url = os.getenv("DATABASE_URL")
