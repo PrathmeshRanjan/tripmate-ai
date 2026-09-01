@@ -1,20 +1,26 @@
 import os
 import sys
+from pathlib import Path
 from dotenv import load_dotenv
 from langchain_mcp_adapters.client import MultiServerMCPClient
 
 load_dotenv()
 
+BASE_DIR = Path(__file__).resolve().parent
+WEATHER_SERVER_PATH = BASE_DIR / "weather_custom_mcp_server.py"
+
 TAVILY_API_KEY = os.getenv('TAVILY_API_KEY', "")
 AVIATION_STACK_API_KEY = os.getenv('AVIATION_STACK_API_KEY') or os.getenv('AVIATIONSTACK_API_KEY', "")
+OPENWEATHER_API_KEY = os.getenv('OPENWEATHER_API_KEY', "")
 
 client = MultiServerMCPClient(
     {
-        # Remote MCP
+        # 1. Remote HTTP MCP Server
         "tavily": {
             "transport": "streamable_http",
             "url": f"https://mcp.tavily.com/mcp/?tavilyApiKey={TAVILY_API_KEY}"
         },
+        # 2. Local Subprocess MCP Server (AviationStack Package)
         "aviationstack": {
             "transport": "stdio",
             "command": sys.executable,
@@ -24,6 +30,17 @@ client = MultiServerMCPClient(
             ],
             "env": {
                 "AVIATION_STACK_API_KEY": AVIATION_STACK_API_KEY
+            }
+        },
+        # 3. Custom Local FastMCP Server (Weather Server)
+        "weather": {
+            "transport": "stdio",
+            "command": sys.executable,
+            "args": [
+                str(WEATHER_SERVER_PATH)
+            ],
+            "env": {
+                "OPENWEATHER_API_KEY": OPENWEATHER_API_KEY
             }
         }
     }
@@ -101,3 +118,68 @@ async def aviation_mcp_call(
 
     result = await tool.ainvoke(tool_args or {})
     return result
+
+# ==============================================================================
+# Weather Custom MCP
+# ==============================================================================
+
+weather_tool = None
+forecast_tool = None
+
+async def initialize_weather_tools():
+    global weather_tool, forecast_tool
+
+    if weather_tool is not None and forecast_tool is not None:
+        return
+
+    if not WEATHER_SERVER_PATH.exists():
+        raise FileNotFoundError(
+            f"Weather MCP server file was not found: {WEATHER_SERVER_PATH}"
+        )
+
+    try:
+        tools = await client.get_tools(server_name="weather")
+        tools_by_name = {tool.name: tool for tool in tools}
+
+        weather_tool = tools_by_name.get("get_current_weather")
+        forecast_tool = tools_by_name.get("get_forecast")
+
+        if weather_tool is None or forecast_tool is None:
+            available_tools = ", ".join(tools_by_name.keys())
+            raise RuntimeError(
+                f"Missing Weather MCP tools. Available tools: {available_tools or 'none'}"
+            )
+    except Exception as e:
+        print(f"Warning: Weather MCP initialization error: {e}")
+        weather_tool = None
+        forecast_tool = None
+
+
+async def weather_mcp_search(city: str):
+    """
+    Fetches current weather for a city using the custom FastMCP weather server.
+    """
+    try:
+        await initialize_weather_tools()
+        if weather_tool is None:
+            return f"Current weather data unavailable for {city}."
+
+        result = await weather_tool.ainvoke({"city": city})
+        return result
+    except Exception as e:
+        return f"Weather lookup note for {city}: {str(e)}"
+
+
+async def forecast_mcp_search(city: str):
+    """
+    Fetches upcoming forecast entries for a city using the custom FastMCP weather server.
+    """
+    try:
+        await initialize_weather_tools()
+        if forecast_tool is None:
+            return f"Weather forecast data unavailable for {city}."
+
+        result = await forecast_tool.ainvoke({"city": city})
+        return result
+    except Exception as e:
+        return f"Forecast lookup note for {city}: {str(e)}"

@@ -20,3 +20,4 @@ pycountry
 langchain-mcp-adapters
 nest_asyncio
 mcp
+aviationstack-mcp

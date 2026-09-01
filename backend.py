@@ -13,7 +13,12 @@ from langchain_core.messages import (
     SystemMessage,
 )
 from langchain.chat_models import init_chat_model
-from mcp_client import tavily_mcp_search, aviation_mcp_call
+from mcp_client import (
+    tavily_mcp_search,
+    aviation_mcp_call,
+    weather_mcp_search,
+    forecast_mcp_search
+)
 
 load_dotenv()
 
@@ -36,8 +41,10 @@ def get_database_url():
 class TravelState(TypedDict):
     messages: Annotated[list[AnyMessage], add_messages]
     user_query: str
+    destination_city: str
     flight_results: str
     hotel_results: str
+    weather_results: str
     itinerary: str
     llm_calls: int
 
@@ -48,6 +55,7 @@ You are an expert aviation and travel flight specialist.
 User Travel Request:
 {query}
 
+Destination City: {destination_city}
 Flight & Route Context from AviationStack MCP:
 {route_data}
 
@@ -63,35 +71,40 @@ Format the output cleanly in Markdown with bullet points and bold key details.
 """
 
 
-def extract_route_iata(query: str) -> tuple[str, str]:
+def extract_trip_entities(query: str) -> tuple[str, str, str]:
     """
-    Extracts origin and destination 3-letter IATA codes for targeted flight searches.
+    Extracts origin IATA, destination IATA, and destination city name in a single LLM call.
     """
     extract_prompt = f"""
-Identify the departure (origin) and arrival (destination) locations from this travel request, and output their 3-letter IATA airport codes.
-
+Identify the travel entities from this request:
 Query: "{query}"
 
-Output exactly in this format:
-ORIGIN: <3-letter IATA code, default to DEL if origin is not specified>
-DESTINATION: <3-letter IATA code of the main international airport>
+Output strictly in this format:
+ORIGIN_IATA: <3-letter IATA code, default to DEL if not specified>
+DEST_IATA: <3-letter IATA code for main international airport>
+DEST_CITY: <Primary destination city name, e.g. Tokyo, Paris, London, Bali>
 """
     try:
         res = llm.invoke(extract_prompt).content
         dep_iata = "DEL"
         arr_iata = "TYO"
+        dest_city = "Tokyo"
         for line in res.strip().split("\n"):
-            if "ORIGIN:" in line:
-                val = line.split("ORIGIN:")[1].strip().upper()[:3]
+            if "ORIGIN_IATA:" in line:
+                val = line.split("ORIGIN_IATA:")[1].strip().upper()[:3]
                 if len(val) == 3 and val.isalpha():
                     dep_iata = val
-            elif "DESTINATION:" in line:
-                val = line.split("DESTINATION:")[1].strip().upper()[:3]
+            elif "DEST_IATA:" in line:
+                val = line.split("DEST_IATA:")[1].strip().upper()[:3]
                 if len(val) == 3 and val.isalpha():
                     arr_iata = val
-        return dep_iata, arr_iata
+            elif "DEST_CITY:" in line:
+                val = line.split("DEST_CITY:")[1].strip()
+                if val:
+                    dest_city = val
+        return dep_iata, arr_iata, dest_city
     except Exception:
-        return "DEL", "HND"
+        return "DEL", "HND", "Tokyo"
 
 
 def flight_agent(state: TravelState):
@@ -99,11 +112,11 @@ def flight_agent(state: TravelState):
     route_details = []
 
     try:
-        # 1. Resolve route IATA codes
-        dep_iata, arr_iata = extract_route_iata(query)
-        route_details.append(f"Route: {dep_iata} -> {arr_iata}")
+        # Extract origin IATA, destination IATA, and destination city in 1 LLM call
+        dep_iata, arr_iata, dest_city = extract_trip_entities(query)
+        route_details.append(f"Route: {dep_iata} -> {arr_iata} ({dest_city})")
 
-        # 2. Query AviationStack MCP for targeted route details
+        # 1. Query AviationStack MCP for targeted route details
         try:
             routes_data = asyncio.run(
                 aviation_mcp_call(
@@ -115,7 +128,7 @@ def flight_agent(state: TravelState):
         except Exception as e:
             route_details.append(f"Route lookup note: {e}")
 
-        # 3. Query AviationStack MCP for departure schedules
+        # 2. Query AviationStack MCP for departure schedules
         try:
             sched_data = asyncio.run(
                 aviation_mcp_call(
@@ -127,9 +140,10 @@ def flight_agent(state: TravelState):
         except Exception as e:
             route_details.append(f"Schedule lookup note: {e}")
 
-        # 4. Synthesize flight guidance with LLM
+        # 3. Synthesize flight guidance with LLM
         prompt = FLIGHT_AGENT_PROMPT.format(
             query=query,
+            destination_city=dest_city,
             route_data="\n\n".join(route_details)
         )
 
@@ -137,9 +151,11 @@ def flight_agent(state: TravelState):
         flight_data = response.content
 
     except Exception as e:
+        dest_city = "Destination"
         flight_data = f"Flight information: General route advice for {query} (Details: {str(e)})"
 
     return {
+        "destination_city": dest_city,
         "flight_results": flight_data,
         "messages": [
             AIMessage(
@@ -154,8 +170,8 @@ def flight_agent(state: TravelState):
 # =========================
 
 def hotel_agent(state: TravelState):
-    query = f"Best hotels for {state['user_query']}"
-    # We cannot use await because this hotel_agent is a non async method
+    dest_city = state.get("destination_city") or state["user_query"]
+    query = f"Best hotels and accommodations in {dest_city}"
     hotel_results = asyncio.run(tavily_mcp_search(query))
 
     return {
@@ -164,6 +180,33 @@ def hotel_agent(state: TravelState):
             AIMessage(content="Hotel information fetched.")
         ],
         "llm_calls": state.get("llm_calls", 0) + 1
+    }
+
+# =========================
+# Weather Agent
+# =========================
+
+def weather_agent(state: TravelState):
+    city = state.get("destination_city") or state["user_query"]
+
+    try:
+        weather_data = asyncio.run(
+            weather_mcp_search(city)
+        )
+        forecast_data = asyncio.run(
+            forecast_mcp_search(city)
+        )
+        weather_summary = f"Current Weather in {city}:\n{weather_data}\n\nForecast:\n{forecast_data}"
+    except Exception as e:
+        weather_summary = f"Weather information unavailable for {city}: {str(e)}"
+
+    return {
+        "weather_results": weather_summary,
+        "messages": [
+            AIMessage(
+                content="Weather information fetched"
+            )
+        ]
     }
 
 
@@ -183,6 +226,9 @@ Flight Results:
 
 Hotel Results:
 {state['hotel_results']}
+
+Weather Results:
+{state['weather_results']}
 
 Make the itinerary practical, budget-aware, and easy to follow.
 """
@@ -219,18 +265,23 @@ Hotels:
 Itinerary:
 {state['itinerary']}
 
+Weather Results:
+{state['weather_results']}
+
 Format the final answer beautifully using these sections:
 
 1. Trip Summary
 2. Flight Information
 3. Hotel Suggestions
-4. Day-by-Day Itinerary
-5. Estimated Budget
-6. Final Recommendations
+4. Weather Information
+5. Day-by-Day Itinerary
+6. Estimated Budget
+7. Final Recommendations
 
 Important:
 - Be clear and practical.
 - Mention that live flight API may not provide ticket prices if pricing is unavailable.
+- Include weather-based travel advice.
 - Keep the response useful for real travel planning.
 """
 
@@ -248,12 +299,14 @@ graph = StateGraph(TravelState)
 
 graph.add_node("flight_agent", flight_agent)
 graph.add_node("hotel_agent", hotel_agent)
+graph.add_node('weather_agent', weather_agent)
 graph.add_node("itinerary_agent", itinerary_agent)
 graph.add_node("final_agent", final_agent)
 
 graph.add_edge(START, "flight_agent")
 graph.add_edge("flight_agent", "hotel_agent")
-graph.add_edge("hotel_agent", "itinerary_agent")
+graph.add_edge("hotel_agent", "weather_agent")
+graph.add_edge("weather_agent", "itinerary_agent")
 graph.add_edge("itinerary_agent", "final_agent")
 graph.add_edge("final_agent", END)
 
@@ -285,8 +338,10 @@ def run_travel_agent(user_input: str, thread_id: str | None = None):
                     HumanMessage(content=user_input)
                 ],
                 "user_query": user_input,
+                "destination_city": "",
                 "flight_results": "",
                 "hotel_results": "",
+                "weather_results": "",
                 "itinerary": "",
                 "llm_calls": 0
             },
@@ -300,6 +355,7 @@ def run_travel_agent(user_input: str, thread_id: str | None = None):
             "answer": final_answer,
             "flight_results": result.get("flight_results", ""),
             "hotel_results": result.get("hotel_results", ""),
+            "weather_results": result.get("weather_results", ""),
             "itinerary": result.get("itinerary", ""),
             "llm_calls": result.get("llm_calls", 0),
         }
@@ -335,6 +391,7 @@ def get_travel_session(thread_id: str):
             "user_query": values.get("user_query", ""),
             "flight_results": values.get("flight_results", ""),
             "hotel_results": values.get("hotel_results", ""),
+            "weather_results": values.get("weather_results", ""),
             "itinerary": values.get("itinerary", ""),
             "llm_calls": values.get("llm_calls", 0),
         }
