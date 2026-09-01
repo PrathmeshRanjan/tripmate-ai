@@ -18,9 +18,6 @@ from pydantic import BaseModel
 # Import the core LangGraph multi-agent travel planner execution pipeline
 from backend import run_travel_agent, get_travel_session
 
-import nest_asyncio
-nest_asyncio.apply()
-
 # Locate the root directory to safely resolve static files and templates
 BASE_DIR = Path(__file__).resolve().parent
 
@@ -79,7 +76,7 @@ async def home(request: Request):
 
 
 @app.post("/api/travel")
-async def travel_planner(request_data: TravelRequest):
+def travel_planner(request_data: TravelRequest):
     """
     Primary API endpoint for trip planning.
     Receives user query -> Invokes LangGraph multi-agent workflow -> Returns complete itinerary & results.
@@ -97,7 +94,7 @@ async def travel_planner(request_data: TravelRequest):
                 }
             )
 
-        # Execute the LangGraph travel agent pipeline (Flight -> Hotel -> Itinerary -> Final)
+        # Execute the LangGraph travel agent pipeline (Flight -> Hotel -> Weather -> Itinerary -> Final)
         result = run_travel_agent(
             user_input=user_message,
             thread_id=request_data.thread_id
@@ -132,7 +129,7 @@ async def travel_planner(request_data: TravelRequest):
 
 
 @app.get("/api/travel/session/{thread_id}")
-async def get_session(thread_id: str):
+def get_session(thread_id: str):
     """
     Restores the latest saved travel plan state from Postgres for a given session/thread_id.
     """
