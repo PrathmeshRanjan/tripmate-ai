@@ -17,3 +17,6 @@ psycopg[binary]
 psycopg_pool
 airportsdata
 pycountry
+langchain-mcp-adapters
+nest_asyncio
+mcp

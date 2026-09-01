@@ -2,8 +2,7 @@ import os
 from dotenv import load_dotenv
 from typing import TypedDict, Annotated
 import uuid
-import psycopg
-from psycopg.rows import dict_row
+import asyncio
 from langgraph.graph import StateGraph, START, END
 from langgraph.graph.message import add_messages
 from langgraph.checkpoint.postgres import PostgresSaver
@@ -14,7 +13,7 @@ from langchain_core.messages import (
     SystemMessage,
 )
 from langchain.chat_models import init_chat_model
-from tools.tavily_tool import tavily_search
+from mcp_client import tavily_mcp_search
 from tools.flight_tool import search_flights
 
 load_dotenv()
@@ -66,7 +65,8 @@ def flight_agent(state: TravelState):
 
 def hotel_agent(state: TravelState):
     query = f"Best hotels for {state['user_query']}"
-    hotel_results = tavily_search(query)
+    # We cannot use await because this hotel_agent is a non async method
+    hotel_results = asyncio.run(tavily_mcp_search(query))
 
     return {
         "hotel_results": hotel_results,

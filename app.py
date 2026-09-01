@@ -18,6 +18,9 @@ from pydantic import BaseModel
 # Import the core LangGraph multi-agent travel planner execution pipeline
 from backend import run_travel_agent, get_travel_session
 
+import nest_asyncio
+nest_asyncio.apply()
+
 # Locate the root directory to safely resolve static files and templates
 BASE_DIR = Path(__file__).resolve().parent
 
