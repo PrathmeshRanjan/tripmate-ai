@@ -13,8 +13,7 @@ from langchain_core.messages import (
     SystemMessage,
 )
 from langchain.chat_models import init_chat_model
-from mcp_client import tavily_mcp_search
-from tools.flight_tool import search_flights
+from mcp_client import tavily_mcp_search, aviation_mcp_call
 
 load_dotenv()
 
@@ -42,22 +41,113 @@ class TravelState(TypedDict):
     itinerary: str
     llm_calls: int
 
-# =========================
-# Flight Agent
-# =========================
+
+FLIGHT_AGENT_PROMPT = """
+You are an expert aviation and travel flight specialist.
+
+User Travel Request:
+{query}
+
+Flight & Route Context from AviationStack MCP:
+{route_data}
+
+Provide a clear, practical flight guide including:
+1. Recommended Departure & Arrival Airports (with 3-letter IATA codes)
+2. Major Airlines Serving or Connecting on this Route
+3. Estimated Flight Duration & Layover Guidelines
+4. Approximate Airfare Range (Economy & Business)
+5. Peak Travel Season & High-Fare Warnings
+6. Key Booking Tips (Best booking window, airport transit advice)
+
+Format the output cleanly in Markdown with bullet points and bold key details.
+"""
+
+
+def extract_route_iata(query: str) -> tuple[str, str]:
+    """
+    Extracts origin and destination 3-letter IATA codes for targeted flight searches.
+    """
+    extract_prompt = f"""
+Identify the departure (origin) and arrival (destination) locations from this travel request, and output their 3-letter IATA airport codes.
+
+Query: "{query}"
+
+Output exactly in this format:
+ORIGIN: <3-letter IATA code, default to DEL if origin is not specified>
+DESTINATION: <3-letter IATA code of the main international airport>
+"""
+    try:
+        res = llm.invoke(extract_prompt).content
+        dep_iata = "DEL"
+        arr_iata = "TYO"
+        for line in res.strip().split("\n"):
+            if "ORIGIN:" in line:
+                val = line.split("ORIGIN:")[1].strip().upper()[:3]
+                if len(val) == 3 and val.isalpha():
+                    dep_iata = val
+            elif "DESTINATION:" in line:
+                val = line.split("DESTINATION:")[1].strip().upper()[:3]
+                if len(val) == 3 and val.isalpha():
+                    arr_iata = val
+        return dep_iata, arr_iata
+    except Exception:
+        return "DEL", "HND"
+
 
 def flight_agent(state: TravelState):
     query = state["user_query"]
-    flight_data = search_flights(query)
+    route_details = []
+
+    try:
+        # 1. Resolve route IATA codes
+        dep_iata, arr_iata = extract_route_iata(query)
+        route_details.append(f"Route: {dep_iata} -> {arr_iata}")
+
+        # 2. Query AviationStack MCP for targeted route details
+        try:
+            routes_data = asyncio.run(
+                aviation_mcp_call(
+                    "list_routes",
+                    {"dep_iata": dep_iata, "arr_iata": arr_iata, "limit": 5}
+                )
+            )
+            route_details.append(f"Direct/Connecting Routes:\n{routes_data}")
+        except Exception as e:
+            route_details.append(f"Route lookup note: {e}")
+
+        # 3. Query AviationStack MCP for departure schedules
+        try:
+            sched_data = asyncio.run(
+                aviation_mcp_call(
+                    "flight_arrival_departure_schedule",
+                    {"airport_iata_code": dep_iata, "schedule_type": "departure", "number_of_flights": 3}
+                )
+            )
+            route_details.append(f"Departure Schedules ({dep_iata}):\n{sched_data}")
+        except Exception as e:
+            route_details.append(f"Schedule lookup note: {e}")
+
+        # 4. Synthesize flight guidance with LLM
+        prompt = FLIGHT_AGENT_PROMPT.format(
+            query=query,
+            route_data="\n\n".join(route_details)
+        )
+
+        response = llm.invoke(prompt)
+        flight_data = response.content
+
+    except Exception as e:
+        flight_data = f"Flight information: General route advice for {query} (Details: {str(e)})"
 
     return {
         "flight_results": flight_data,
         "messages": [
-            AIMessage(content="Flight results fetched.")
+            AIMessage(
+                content="Flight recommendations generated"
+            )
         ],
         "llm_calls": state.get("llm_calls", 0) + 1
     }
-
 
 # =========================
 # Hotel Agent

@@ -130,6 +130,7 @@ class TravelState(TypedDict):
 TripMate/
 ├── app.py                  # FastAPI application, routes, and exception handlers
 ├── backend.py              # LangGraph graph definition, state schema, and agents
+├── mcp_client.py           # Multi-server MCP client (Tavily HTTP + AviationStack stdio)
 ├── Dockerfile              # Container image build definition
 ├── .dockerignore           # Excluded patterns for Docker build context
 ├── pyproject.toml          # Project metadata and package dependencies
@@ -137,12 +138,9 @@ TripMate/
 ├── .env.example            # Template for environment configuration
 ├── templates/
 │   └── index.html          # Jinja2 HTML layout and structural components
-├── static/
-│   ├── style.css           # Design system, layout, and print styles
-│   └── script.js           # Client-side controller and session logic
-└── tools/
-    ├── flight_tool.py      # IATA resolver and AviationStack API integration
-    └── tavily_tool.py      # Tavily search wrapper for accommodation data
+└── static/
+    ├── style.css           # Design system, layout, and print styles
+    └── script.js           # Client-side controller and session logic
 ```
 
 ---
