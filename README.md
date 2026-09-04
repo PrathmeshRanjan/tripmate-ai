@@ -162,8 +162,8 @@ Voyagent/
 
 ### 1. Clone the Repository
 ```bash
-git clone https://github.com/PrathmeshRanjan/tripmate-ai.git
-cd tripmate-ai
+git clone https://github.com/PrathmeshRanjan/Voyagent.git
+cd Voyagent
 ```
 
 ### 2. Set Up Virtual Environment
