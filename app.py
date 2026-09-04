@@ -1,7 +1,7 @@
 """
-TripMate AI - FastAPI Web Server
+Voyagent AI - FastAPI Web Server
 =================================
-This module acts as the HTTP interface for TripMate. It serves the Jinja2 HTML/CSS frontend
+This module acts as the HTTP interface for Voyagent. It serves the Jinja2 HTML/CSS frontend
 and exposes REST API endpoints that connect frontend requests to the LangGraph multi-agent backend.
 """
 
@@ -26,7 +26,7 @@ BASE_DIR = Path(__file__).resolve().parent
 # ==============================================================================
 
 app = FastAPI(
-    title="TripMate AI",
+    title="Voyagent AI",
     description="LangGraph Multi-Agent Travel Planner with FastAPI Frontend",
     version="1.0.0"
 )

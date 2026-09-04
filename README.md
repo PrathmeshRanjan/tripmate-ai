@@ -1,4 +1,4 @@
-# TripMate AI: Multi-Agent Travel Planner
+# Voyagent AI: Multi-Agent Travel Planner
 
 Live Deployment: [https://tripmate-ai-546l.onrender.com/](https://tripmate-ai-546l.onrender.com/)
 
@@ -6,7 +6,7 @@ Live Deployment: [https://tripmate-ai-546l.onrender.com/](https://tripmate-ai-54
 
 ## Overview
 
-TripMate AI is an autonomous, multi-agent travel planning system built with LangGraph, Model Context Protocol (MCP), FastAPI, and PostgreSQL. It transforms natural language travel requests into structured itineraries by coordinating specialized AI agents. Each agent handles a distinct stage of travel planning—including flight route discovery, accommodation research, local weather analysis, activity scheduling, and synthesis—while persisting state and conversation checkpoints to a PostgreSQL database.
+Voyagent AI is an autonomous, multi-agent travel planning system built with LangGraph, Model Context Protocol (MCP), FastAPI, and PostgreSQL. It transforms natural language travel requests into structured itineraries by coordinating specialized AI agents. Each agent handles a distinct stage of travel planning—including flight route discovery, accommodation research, local weather analysis, activity scheduling, and synthesis—while persisting state and conversation checkpoints to a PostgreSQL database.
 
 ---
 
@@ -134,7 +134,7 @@ class TravelState(TypedDict):
 ## Repository Structure
 
 ```text
-TripMate/
+Voyagent/
 ├── app.py                         # FastAPI application, routes, and exception handlers
 ├── backend.py                     # LangGraph graph definition, state schema, and agents
 ├── mcp_client.py                  # Multi-server MCP client (Tavily HTTP + AviationStack stdio + Weather stdio)
@@ -197,7 +197,7 @@ DATABASE_URL=postgresql://user:password@host/dbname?sslmode=require
 # Optional LangSmith Tracing
 LANGSMITH_TRACING=false
 LANGSMITH_API_KEY=
-LANGSMITH_PROJECT=tripmate-ai
+LANGSMITH_PROJECT=voyagent-ai
 ```
 
 ### 5. Run the Application
@@ -213,12 +213,12 @@ The application will be accessible at `http://127.0.0.1:8000`.
 
 ### 1. Build the Docker Image
 ```bash
-docker build -t tripmate-ai .
+docker build -t voyagent-ai .
 ```
 
 ### 2. Run the Container
 ```bash
-docker run -d -p 8000:8000 --env-file .env --name tripmate-app tripmate-ai
+docker run -d -p 8000:8000 --env-file .env --name voyagent-app voyagent-ai
 ```
 
 ---

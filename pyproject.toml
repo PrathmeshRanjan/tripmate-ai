@@ -1,7 +1,7 @@
 [project]
-name = "tripmate"
+name = "voyagent"
 version = "0.1.0"
-description = "Add your description here"
+description = "Voyagent AI - Autonomous Multi-Agent Travel Planner"
 readme = "README.md"
 requires-python = ">=3.14"
 dependencies = [

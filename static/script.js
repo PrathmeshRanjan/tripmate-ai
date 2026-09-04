@@ -1,5 +1,5 @@
 /**
- * TripMate AI - Frontend Client Controller
+ * Voyagent AI - Frontend Client Controller
  * Handles session state, auto-restoration of previous plans from Postgres,
  * multi-agent progress animations, Markdown parsing, and Trip History Drawer.
  */
@@ -537,7 +537,7 @@ function downloadPDF() {
 
     const options = {
         margin: [0.4, 0.5, 0.4, 0.5],
-        filename: `TripMate-Plan-${new Date().toISOString().slice(0, 10)}.pdf`,
+        filename: `Voyagent-Plan-${new Date().toISOString().slice(0, 10)}.pdf`,
         image: {
             type: "jpeg",
             quality: 0.98,
