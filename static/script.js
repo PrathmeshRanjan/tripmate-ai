@@ -426,14 +426,25 @@ function hideError() {
 
 function renderSupervisorOutput(resultData) {
     const supervisorCard = document.getElementById("supervisorCard");
-    const supervisorAgentsGrid = document.getElementById("supervisorAgentsGrid");
-    const supervisorReasoningBox = document.getElementById("supervisorReasoningBox");
-    const supervisorReasoningText = document.getElementById("supervisorReasoningText");
-    const supervisorConstraintsBox = document.getElementById("supervisorConstraintsBox");
+    const supervisorAgentsGrid = document.getElementById(
+        "supervisorAgentsGrid",
+    );
+    const supervisorReasoningBox = document.getElementById(
+        "supervisorReasoningBox",
+    );
+    const supervisorReasoningText = document.getElementById(
+        "supervisorReasoningText",
+    );
+    const supervisorConstraintsBox = document.getElementById(
+        "supervisorConstraintsBox",
+    );
 
     if (!supervisorCard || !supervisorAgentsGrid) return;
 
-    if (!resultData || (!resultData.selected_agents && !resultData.supervisor_reasoning)) {
+    if (
+        !resultData ||
+        (!resultData.selected_agents && !resultData.supervisor_reasoning)
+    ) {
         supervisorCard.classList.add("hidden");
         return;
     }
@@ -520,7 +531,10 @@ function renderSupervisorOutput(resultData) {
 
         if (constraintItems.length > 0) {
             supervisorConstraintsBox.innerHTML = constraintItems
-                .map((item) => `<span class="constraint-chip">${escapeHtml(item)}</span>`)
+                .map(
+                    (item) =>
+                        `<span class="constraint-chip">${escapeHtml(item)}</span>`,
+                )
                 .join("");
             supervisorConstraintsBox.classList.remove("hidden");
         } else {

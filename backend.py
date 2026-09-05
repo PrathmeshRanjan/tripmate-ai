@@ -15,6 +15,7 @@ from langchain_core.messages import (
     SystemMessage,
 )
 from langchain.chat_models import init_chat_model
+from langchain_google_genai import ChatGoogleGenerativeAI
 from mcp_client import (
     tavily_mcp_search,
     aviation_mcp_call,
@@ -24,7 +25,38 @@ from mcp_client import (
 
 load_dotenv()
 
-llm = init_chat_model("mistralai:mistral-small-latest")
+
+def _build_llm():
+    """
+    Initializes the primary chat model (Mistral) paired with an automatic
+    fallback model (Gemini) in case of rate limiting (HTTP 429), quota exhaustion,
+    network timeouts, or provider downtime.
+    """
+    primary_model = os.getenv("PRIMARY_MODEL", "mistralai:mistral-small-latest")
+    fallback_model = os.getenv("FALLBACK_MODEL", "gemini-2.5-flash")
+    google_api_key = os.getenv("GOOGLE_API_KEY")
+
+    # Primary chat model (Mistral)
+    primary_llm = init_chat_model(
+        primary_model,
+        temperature=0.2,
+        max_retries=2,
+    )
+
+    # Attach Gemini as an automatic fallback if GOOGLE_API_KEY is configured
+    if google_api_key:
+        fallback_llm = ChatGoogleGenerativeAI(
+            model=fallback_model,
+            api_key=google_api_key,
+            temperature=0.2,
+            max_retries=2,
+        )
+        return primary_llm.with_fallbacks([fallback_llm])
+
+    return primary_llm
+
+
+llm = _build_llm()
 
 def get_database_url():
     database_url = os.getenv("DATABASE_URL")

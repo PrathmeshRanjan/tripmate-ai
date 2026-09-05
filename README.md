@@ -163,6 +163,16 @@ class TravelState(TypedDict):
 
 ---
 
+## Model Fallback Strategy
+
+To prevent interruption from upstream API rate limits (such as HTTP 429), quota exhaustion, or connectivity issues, Voyagent AI implements an automatic fallback mechanism using LangChain's `with_fallbacks`:
+
+* **Primary Model**: Defaults to `mistralai:mistral-small-latest` via `MISTRAL_API_KEY`.
+* **Fallback Model**: Defaults to Google Gemini `gemini-2.5-flash` via `GOOGLE_API_KEY`.
+* **Behavior**: If the primary model raises an exception (such as a 429 rate limit or network timeout), the node automatically catches the failure and immediately routes the request to Google Gemini without interrupting execution or losing state.
+
+---
+
 ## Technology Stack
 
 ### Backend & AI Agents
@@ -170,7 +180,7 @@ class TravelState(TypedDict):
 * **FastAPI**: Asynchronous web framework exposing REST endpoints and serving static assets.
 * **Uvicorn**: ASGI web server implementation.
 * **LangGraph & LangChain Core**: Multi-agent state graph orchestration, node routing, and message reducers.
-* **Mistral AI & Google Gemini**: Language model providers for entity extraction, reasoning, and synthesis.
+* **Mistral AI & Google Gemini**: Language model providers with automatic fallback from Mistral to Gemini on rate limiting (HTTP 429) or service interruption.
 * **Psycopg 3 & Psycopg Pool**: PostgreSQL database adapter supporting connection pooling and binary serialization.
 * **PostgreSQL / Neon**: Serverless relational database for persistent checkpoint storage.
 
@@ -249,8 +259,12 @@ Create a `.env` file in the project root based on the following template:
 
 ```env
 # Language Model Providers
-GOOGLE_API_KEY=your_gemini_api_key_here
 MISTRAL_API_KEY=your_mistral_api_key_here
+GOOGLE_API_KEY=your_gemini_api_key_here
+
+# Optional Model Configuration (with automatic fallback to Gemini)
+PRIMARY_MODEL=mistralai:mistral-small-latest
+FALLBACK_MODEL=gemini-2.5-flash
 
 # Search, Flight, and Weather Tools (MCP)
 TAVILY_API_KEY=your_tavily_api_key_here
