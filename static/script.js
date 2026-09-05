@@ -263,6 +263,8 @@ function resetSession() {
 
     // Hide active result & errors on main view
     document.getElementById("resultSection").classList.add("hidden");
+    const supervisorCard = document.getElementById("supervisorCard");
+    if (supervisorCard) supervisorCard.classList.add("hidden");
     hideError();
     showToast("Ready for a new trip. Past plans remain in Trip History.");
 }
@@ -422,6 +424,114 @@ function hideError() {
     errorBox.classList.add("hidden");
 }
 
+function renderSupervisorOutput(resultData) {
+    const supervisorCard = document.getElementById("supervisorCard");
+    const supervisorAgentsGrid = document.getElementById("supervisorAgentsGrid");
+    const supervisorReasoningBox = document.getElementById("supervisorReasoningBox");
+    const supervisorReasoningText = document.getElementById("supervisorReasoningText");
+    const supervisorConstraintsBox = document.getElementById("supervisorConstraintsBox");
+
+    if (!supervisorCard || !supervisorAgentsGrid) return;
+
+    if (!resultData || (!resultData.selected_agents && !resultData.supervisor_reasoning)) {
+        supervisorCard.classList.add("hidden");
+        return;
+    }
+
+    const selectedAgents = Array.isArray(resultData.selected_agents)
+        ? resultData.selected_agents
+        : [];
+
+    const ALL_AGENTS = [
+        {
+            key: "flight_agent",
+            name: "Flight Agent",
+            desc: "Flight routes, schedules, and airlines",
+        },
+        {
+            key: "hotel_agent",
+            name: "Hotel Agent",
+            desc: "Hotel accommodations and neighborhood stays",
+        },
+        {
+            key: "weather_agent",
+            name: "Weather Agent",
+            desc: "Live conditions and multi-day forecasts",
+        },
+        {
+            key: "budget_agent",
+            name: "Budget Agent",
+            desc: "Cost categories, limits, and feasibility",
+        },
+        {
+            key: "itinerary_agent",
+            name: "Itinerary Agent",
+            desc: "Integrated day-by-day draft plan",
+        },
+    ];
+
+    // Build agent grid items showing which agents were picked vs not picked
+    supervisorAgentsGrid.innerHTML = ALL_AGENTS.map((agent) => {
+        const isPicked = selectedAgents.includes(agent.key);
+        const statusClass = isPicked ? "agent-picked" : "agent-skipped";
+        const badgeClass = isPicked ? "picked" : "skipped";
+        const statusLabel = isPicked ? "Picked" : "Not Picked";
+
+        return `
+            <div class="supervisor-agent-item ${statusClass}">
+                <div class="agent-item-header">
+                    <span class="agent-item-name">${escapeHtml(agent.name)}</span>
+                    <span class="agent-status-badge ${badgeClass}">${statusLabel}</span>
+                </div>
+                <span class="agent-item-desc">${escapeHtml(agent.desc)}</span>
+            </div>
+        `;
+    }).join("");
+
+    // Supervisor reasoning text
+    const reasoning = (resultData.supervisor_reasoning || "").trim();
+    if (reasoning && supervisorReasoningBox && supervisorReasoningText) {
+        supervisorReasoningText.textContent = reasoning;
+        supervisorReasoningBox.classList.remove("hidden");
+    } else if (supervisorReasoningBox) {
+        supervisorReasoningBox.classList.add("hidden");
+    }
+
+    // Extracted constraints chips
+    if (supervisorConstraintsBox) {
+        const constraints = resultData.trip_constraints || {};
+        const constraintItems = [];
+
+        if (constraints.destination) {
+            constraintItems.push(`Destination: ${constraints.destination}`);
+        }
+        if (constraints.origin) {
+            constraintItems.push(`Origin: ${constraints.origin}`);
+        }
+        if (constraints.duration) {
+            constraintItems.push(`Duration: ${constraints.duration}`);
+        }
+        if (constraints.budget) {
+            constraintItems.push(`Budget: ${constraints.budget}`);
+        }
+        if (constraints.travel_style) {
+            constraintItems.push(`Style: ${constraints.travel_style}`);
+        }
+
+        if (constraintItems.length > 0) {
+            supervisorConstraintsBox.innerHTML = constraintItems
+                .map((item) => `<span class="constraint-chip">${escapeHtml(item)}</span>`)
+                .join("");
+            supervisorConstraintsBox.classList.remove("hidden");
+        } else {
+            supervisorConstraintsBox.classList.add("hidden");
+            supervisorConstraintsBox.innerHTML = "";
+        }
+    }
+
+    supervisorCard.classList.remove("hidden");
+}
+
 function showResult(answer, threadId, shouldScroll = true, resultData = null) {
     latestAnswerMarkdown = answer;
 
@@ -440,6 +550,9 @@ function showResult(answer, threadId, shouldScroll = true, resultData = null) {
     } else {
         resultBox.innerText = answer;
     }
+
+    // Render supervisor decision: which agents were picked and which were not
+    renderSupervisorOutput(resultData);
 
     // Check if the plan is paused waiting for human review / approval
     if (resultData && resultData.requires_approval) {
