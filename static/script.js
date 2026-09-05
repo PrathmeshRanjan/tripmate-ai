@@ -549,7 +549,7 @@ async function submitApproval(approved) {
         agentProgress.classList.remove("hidden");
         liveStatusText.textContent = approved
             ? "✨ Final Synthesizer: Polishing approved itinerary..."
-            : "✨ Final Synthesizer: Incorporating revision feedback...";
+            : "✏️ Revision Agent: Applying your feedback to draft...";
         const stepFinal = document.getElementById("step-final");
         if (stepFinal) stepFinal.classList.add("active");
     }
@@ -571,7 +571,8 @@ async function submitApproval(approved) {
 
         if (!response.ok || !data.success) {
             throw new Error(
-                data.error || "Failed to resume travel plan. Please check server logs.",
+                data.error ||
+                    "Failed to resume travel plan. Please check server logs.",
             );
         }
 
@@ -579,7 +580,7 @@ async function submitApproval(approved) {
         showToast(
             approved
                 ? "✨ Itinerary approved and finalized!"
-                : "✏️ Revisions applied to your travel plan!",
+                : "✏️ Draft updated with your revisions! Please review.",
         );
         if (feedbackInput) feedbackInput.value = "";
     } catch (error) {

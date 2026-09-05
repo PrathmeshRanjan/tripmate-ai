@@ -67,13 +67,16 @@ class TravelState(TypedDict):
     budget_results: str                # Cost categories & feasibility analysis
     itinerary: str                     # Structured draft itinerary
 
-    # Human-in-the-Loop (HITL) approval state
+    # Human-in-the-Loop (HITL) approval & revision state
     approval_request: str              # Review prompt presented to human
     approved: bool                     # Whether human approved or requested changes
     human_feedback: str                # User revision instructions (if any)
     final_response: str                # Polished report synthesized after human review
     llm_calls: int                     # Total LLM invocations in this thread
 
+# =========================
+# Shared helpers
+# =========================
 
 # ==============================================================================
 # 2. SHARED HELPERS & AGENT REGISTRY
@@ -529,11 +532,15 @@ Create a clear draft that is ready for human review.
         "llm_calls": state.get("llm_calls", 0) + 1,
     }
 
+# =========================
+# Human-in-the-Loop approval
+# =========================
 # ==============================================================================
 # 5. HUMAN-IN-THE-LOOP (HITL) APPROVAL NODE
 # ==============================================================================
 
 def human_approval_agent(state: TravelState):
+    # Do not wrap interrupt() in try/except. LangGraph uses it to pause execution.
     """
     Human-in-the-Loop checkpoint node.
     
@@ -567,32 +574,84 @@ def human_approval_agent(state: TravelState):
         "messages": [AIMessage(content="Human approval step completed.")],
     }
 
+# ==============================================================================
+# 6. ITINERARY REVISION & FINAL SYNTHESIZER AGENTS
+# ==============================================================================
 
-# ==============================================================================
-# 6. FINAL SYNTHESIZER AGENT
-# ==============================================================================
+def revision_agent(state: TravelState):
+    """
+    Itinerary Revision Node.
+    
+    Triggered when the human reviewer requests modifications instead of approving.
+    Takes user feedback, applies requested adjustments to the current draft itinerary,
+    updates state['itinerary'] and state['approval_request'], and loops back to human_approval.
+    """
+    feedback = (
+        state.get("human_feedback", "").strip()
+        or "Please refine and improve the draft itinerary with more practical details."
+    )
+
+    prompt = f"""
+You are an expert AI travel planner revising an existing draft itinerary based on user feedback.
+
+User Request:
+{state['user_query']}
+
+Trip Constraints:
+{state.get('trip_constraints', {})}
+
+Flight Information:
+{state.get('flight_results', '')}
+
+Hotel Information:
+{state.get('hotel_results', '')}
+
+Weather Forecast:
+{state.get('weather_results', '')}
+
+Budget Breakdown:
+{state.get('budget_results', '')}
+
+Current Draft Itinerary:
+{state.get('itinerary', '')}
+
+User Revision Feedback:
+{feedback}
+
+Instructions:
+1. Update and refine the draft itinerary, directly addressing all points in the user's feedback.
+2. Maintain structured Markdown with clear day-by-day activities, timings, and recommendations.
+3. Keep the plan realistic, budget-aware, and consistent with the destination details.
+4. Output only the updated draft itinerary without extraneous conversational commentary.
+"""
+    response = llm.invoke(
+        [
+            SystemMessage(content="You are an expert AI travel planner revising a draft itinerary."),
+            HumanMessage(content=prompt),
+        ]
+    )
+
+    revised_itinerary = response.content
+    return {
+        "itinerary": revised_itinerary,
+        "approval_request": (
+            f"Revision applied: \"{feedback}\". "
+            "Please review the updated draft. You can approve it or request further changes."
+        ),
+        "human_feedback": "",
+        "approved": False,
+        "messages": [response],
+        "llm_calls": state.get("llm_calls", 0) + 1,
+    }
+
 
 def final_agent(state: TravelState):
     """
-    Consolidates findings from all active specialist agents and the human review.
-    If the human requested adjustments, applies the feedback; if approved, preserves decisions.
+    Consolidates findings from all active specialist agents and the approved itinerary.
     Produces the final structured Markdown report for the user.
     """
-    if state.get("approved", False):
-        review_instruction = (
-            "The user approved the draft. Preserve its decisions while polishing it."
-        )
-    else:
-        review_instruction = f"""
-The user requested a revision. Apply this feedback carefully:
-{state.get('human_feedback', '') or 'Improve the draft before finalizing it.'}
-"""
-
     final_prompt = f"""
-Generate the final travel response for the user.
-
-Human Review:
-{review_instruction}
+Generate the final comprehensive travel plan for the user based on the approved itinerary.
 
 User Request:
 {state['user_query']}
@@ -612,10 +671,10 @@ Weather:
 Budget Analysis:
 {state.get('budget_results', '')}
 
-Draft Itinerary:
+Approved Itinerary:
 {state.get('itinerary', '')}
 
-Format the final answer beautifully using these sections:
+Format the final answer clearly using these sections:
 1. Trip Summary
 2. Flight Information
 3. Hotel Suggestions
@@ -629,13 +688,12 @@ Important:
 - Mention that live flight APIs may not provide ticket prices when pricing is unavailable.
 - Include weather-based travel advice.
 - Keep the response useful for real travel planning.
-- Incorporate the human feedback when revision was requested.
 """
 
     response = llm.invoke(
         [
             SystemMessage(
-                content="You are a professional AI travel booking assistant."
+                content="You are an expert AI travel assistant."
             ),
             HumanMessage(content=final_prompt),
         ]
@@ -647,11 +705,22 @@ Important:
         "llm_calls": state.get("llm_calls", 0) + 1,
     }
 
+# =========================
+# Dynamic Supervisor Routing
+# =========================
 
 # ==============================================================================
 # 7. DYNAMIC SUPERVISOR ROUTING LOGIC
 # ==============================================================================
 
+# ROUTE_MAP defines the explicit routing contract for LangGraph conditional edges.
+# When graph.add_conditional_edges(source, routing_function, path_map) is registered:
+# 1. Validation & Safety: LangGraph verifies that any string returned by routing_function
+#    exists as a key in ROUTE_MAP and maps to a valid target node in the graph.
+# 2. Graph Compilation & Visualization: It informs LangGraph's internal graph compiler
+#    of all permissible branch destinations from conditional nodes (e.g. for mermaid diagrams).
+# 3. Decoupled Mapping: The routing function returns symbolic branch names ("flight_agent", etc.)
+#    which ROUTE_MAP directs to the corresponding target node.
 ROUTE_MAP = {
     "guardrail_blocked": "guardrail_blocked",
     "flight_agent": "flight_agent",
@@ -700,6 +769,27 @@ def route_after_agent(current_agent: str):
     return route
 
 
+APPROVAL_ROUTE_MAP = {
+    "final_agent": "final_agent",
+    "revision_agent": "revision_agent",
+}
+
+
+def route_after_approval(state: TravelState) -> str:
+    """
+    Evaluates human review outcome:
+    - If approved: routes to final_agent to synthesize the complete final response.
+    - If revisions requested: routes to revision_agent to update the draft and loop back to human_approval.
+    """
+    if state.get("approved", False):
+        return "final_agent"
+    return "revision_agent"
+
+
+# =========================
+# Build Graph
+# =========================
+
 # ==============================================================================
 # 8. STATE GRAPH CONSTRUCTION
 # ==============================================================================
@@ -715,6 +805,7 @@ graph.add_node("weather_agent", weather_agent)
 graph.add_node("budget_agent", budget_agent)
 graph.add_node("itinerary_agent", itinerary_agent)
 graph.add_node("human_approval", human_approval_agent)
+graph.add_node("revision_agent", revision_agent)
 graph.add_node("final_agent", final_agent)
 
 # Entry point: start at supervisor
@@ -735,12 +826,23 @@ graph.add_conditional_edges(
     "budget_agent", route_after_agent("budget_agent"), ROUTE_MAP
 )
 
-# Itinerary synthesizes draft -> pauses at human_approval -> polishes at final_agent
+# Itinerary synthesizes draft -> pauses at human_approval
 graph.add_edge("itinerary_agent", "human_approval")
-graph.add_edge("human_approval", "final_agent")
+
+# Conditional approval branch: approved -> final_agent; revision requested -> revision_agent
+graph.add_conditional_edges(
+    "human_approval", route_after_approval, APPROVAL_ROUTE_MAP
+)
+
+# Revision loop: revision_agent updates the draft and loops back to human_approval
+graph.add_edge("revision_agent", "human_approval")
+
 graph.add_edge("final_agent", END)
 graph.add_edge("guardrail_blocked", END)
 
+# =========================
+# PostgreSQL Checkpointer - robust connection lifecycle
+# =========================
 
 # ==============================================================================
 # 9. POSTGRES CHECKPOINTER & EXECUTION LIFECYCLE
@@ -750,6 +852,9 @@ DATABASE_URL = get_database_url()
 travel_graph = graph
 
 
+# =========================
+# FastAPI-facing helpers
+# =========================
 def _interrupt_payload(result: dict[str, Any]) -> dict[str, Any] | None:
     """
     Extracts the payload dict from LangGraph's __interrupt__ attribute if the graph paused.
@@ -823,7 +928,10 @@ def run_travel_agent(user_input: str, thread_id: str | None = None):
     if not thread_id:
         thread_id = f"user_{uuid.uuid4().hex}"
 
-    config = {"configurable": {"thread_id": thread_id}}
+    config = {
+        "configurable": {"thread_id": thread_id},
+        "recursion_limit": 50,
+    }
 
     with PostgresSaver.from_conn_string(DATABASE_URL) as checkpointer:
         checkpointer.setup()
@@ -865,14 +973,17 @@ def resume_travel_agent(
     
     1. Loads the paused state snapshot from PostgreSQL using thread_id.
     2. Sends Command(resume={"approved": approved, "feedback": feedback}) to unblock interrupt().
-    3. human_approval_agent receives the payload and passes control to final_agent.
-    4. final_agent incorporates feedback or preserves decisions to synthesize the final guide.
-    5. Returns the completed, polished travel plan.
+    3. If approved, routes to final_agent to synthesize the final plan and complete at END.
+    4. If revisions requested, routes to revision_agent, updates the draft, and loops back to human_approval.
+    5. Returns the updated draft (with requires_approval=True) or the completed plan (requires_approval=False).
     """
     if not thread_id:
         raise ValueError("thread_id is required to resume a travel plan.")
 
-    config = {"configurable": {"thread_id": thread_id}}
+    config = {
+        "configurable": {"thread_id": thread_id},
+        "recursion_limit": 50,
+    }
 
     with PostgresSaver.from_conn_string(DATABASE_URL) as checkpointer:
         checkpointer.setup()
