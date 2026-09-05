@@ -40,34 +40,46 @@ def get_database_url():
 
     return database_url
 
+# ==============================================================================
+# 1. STATE DEFINITIONS
+# ==============================================================================
+
 class TravelState(TypedDict):
+    """
+    Central state schema for the LangGraph travel planning graph.
+    Passed sequentially across all nodes and persisted to PostgreSQL checkpointer.
+    """
     messages: Annotated[list[AnyMessage], add_messages]
     user_query: str
 
-    # Supervisor + guardrail state
-    guardrail_allowed: bool
-    guardrail_reason: str
-    selected_agents: list[str]
-    trip_constraints: dict[str, Any]
-    supervisor_reasoning: str
+    # Supervisor & Input Guardrail outputs
+    guardrail_allowed: bool            # True if request is travel-related, False otherwise
+    guardrail_reason: str              # Explanation if request is blocked
+    selected_agents: list[str]         # Specialist agents selected by supervisor
+    trip_constraints: dict[str, Any]   # Extracted constraints (budget, style, origin, dates)
+    supervisor_reasoning: str          # Rationale for agent selection
 
-    # New budget + HITL state
-    budget_results: str
-    approval_request: str
-    approved: bool
-    human_feedback: str
-    final_response: str
+    # Specialist Agent outputs
+    destination_city: str              # Resolved primary city name
+    flight_results: str                # Route and schedule analysis from AviationStack MCP
+    hotel_results: str                 # Accommodations from Tavily MCP
+    weather_results: str               # Weather & 5-day forecast from FastMCP server
+    budget_results: str                # Cost categories & feasibility analysis
+    itinerary: str                     # Structured draft itinerary
 
-    destination_city: str
-    flight_results: str
-    hotel_results: str
-    weather_results: str
-    itinerary: str
-    llm_calls: int
+    # Human-in-the-Loop (HITL) approval state
+    approval_request: str              # Review prompt presented to human
+    approved: bool                     # Whether human approved or requested changes
+    human_feedback: str                # User revision instructions (if any)
+    final_response: str                # Polished report synthesized after human review
+    llm_calls: int                     # Total LLM invocations in this thread
 
-# =========================
-# Shared helpers
-# =========================
+
+# ==============================================================================
+# 2. SHARED HELPERS & AGENT REGISTRY
+# ==============================================================================
+
+# Allowed specialist agents that the supervisor can dynamically activate
 KNOWN_AGENTS = {
     "flight_agent",
     "hotel_agent",
@@ -76,6 +88,7 @@ KNOWN_AGENTS = {
     "itinerary_agent",
 }
 
+# Fixed topological evaluation order for active specialist agents
 AGENT_ORDER = [
     "flight_agent",
     "hotel_agent",
@@ -85,6 +98,7 @@ AGENT_ORDER = [
 ]
 
 def _llm_text(system_prompt: str, user_prompt: str) -> str:
+    """Helper to invoke LLM with a system and human message pair."""
     response = llm.invoke(
         [
             SystemMessage(content=system_prompt),
@@ -94,7 +108,10 @@ def _llm_text(system_prompt: str, user_prompt: str) -> str:
     return str(response.content)
 
 def _json_from_llm(text: str) -> dict[str, Any]:
-    """Extract the first complete JSON object returned by the model."""
+    """
+    Extracts and parses the first complete JSON object returned by the model.
+    Slices between the first '{' and the last '}', ignoring markdown backticks or preamble.
+    """
     start = text.find("{")
     end = text.rfind("}")
 
@@ -105,6 +122,7 @@ def _json_from_llm(text: str) -> dict[str, Any]:
 
 
 def _empty_constraints() -> dict[str, Any]:
+    """Provides default empty structure for trip constraints."""
     return {
         "destination": "",
         "origin": "",
@@ -511,11 +529,21 @@ Create a clear draft that is ready for human review.
         "llm_calls": state.get("llm_calls", 0) + 1,
     }
 
-# =========================
-# Human-in-the-Loop approval
-# =========================
+# ==============================================================================
+# 5. HUMAN-IN-THE-LOOP (HITL) APPROVAL NODE
+# ==============================================================================
+
 def human_approval_agent(state: TravelState):
-    # Do not wrap interrupt() in try/except. LangGraph uses it to pause execution.
+    """
+    Human-in-the-Loop checkpoint node.
+    
+    Calls LangGraph's interrupt() to pause execution and store the checkpoint in PostgreSQL.
+    CRITICAL: Never wrap interrupt() in a try/except block because LangGraph uses a special
+    control-flow exception internally to halt execution and return control to the caller.
+    
+    When resumed via Command(resume={"approved": ..., "feedback": ...}), interrupt()
+    unblocks and evaluates to the dictionary passed in the resume command.
+    """
     review = interrupt(
         {
             "question": "Do you approve this itinerary?",
@@ -539,11 +567,17 @@ def human_approval_agent(state: TravelState):
         "messages": [AIMessage(content="Human approval step completed.")],
     }
 
-# =========================
-# Final Response Agent
-# =========================
+
+# ==============================================================================
+# 6. FINAL SYNTHESIZER AGENT
+# ==============================================================================
 
 def final_agent(state: TravelState):
+    """
+    Consolidates findings from all active specialist agents and the human review.
+    If the human requested adjustments, applies the feedback; if approved, preserves decisions.
+    Produces the final structured Markdown report for the user.
+    """
     if state.get("approved", False):
         review_instruction = (
             "The user approved the draft. Preserve its decisions while polishing it."
@@ -613,9 +647,11 @@ Important:
         "llm_calls": state.get("llm_calls", 0) + 1,
     }
 
-# =========================
-# Dynamic Supervisor Routing
-# =========================
+
+# ==============================================================================
+# 7. DYNAMIC SUPERVISOR ROUTING LOGIC
+# ==============================================================================
+
 ROUTE_MAP = {
     "guardrail_blocked": "guardrail_blocked",
     "flight_agent": "flight_agent",
@@ -627,11 +663,17 @@ ROUTE_MAP = {
 
 
 def _selected_agents(state: TravelState) -> list[str]:
+    """Filters AGENT_ORDER to keep only the agents selected by the supervisor."""
     selected = state.get("selected_agents", [])
     return [agent for agent in AGENT_ORDER if agent in selected]
 
 
 def route_from_supervisor(state: TravelState) -> str:
+    """
+    Initial conditional router:
+    - If guardrail blocked the query -> routes directly to guardrail_blocked node.
+    - Otherwise -> routes to the first active specialist agent in AGENT_ORDER.
+    """
     if not state.get("guardrail_allowed", True):
         return "guardrail_blocked"
 
@@ -640,6 +682,11 @@ def route_from_supervisor(state: TravelState) -> str:
 
 
 def route_after_agent(current_agent: str):
+    """
+    Higher-order routing function:
+    Returns a conditional edge router that finds the next active agent after `current_agent`
+    in AGENT_ORDER. If no more specialists remain, routes to `itinerary_agent`.
+    """
     def route(state: TravelState) -> str:
         selected = _selected_agents(state)
         current_index = AGENT_ORDER.index(current_agent)
@@ -652,11 +699,14 @@ def route_after_agent(current_agent: str):
 
     return route
 
-# =========================
-# Build Graph
-# =========================
+
+# ==============================================================================
+# 8. STATE GRAPH CONSTRUCTION
+# ==============================================================================
+
 graph = StateGraph(TravelState)
 
+# Register graph nodes
 graph.add_node("supervisor", supervisor_agent)
 graph.add_node("guardrail_blocked", guardrail_blocked_agent)
 graph.add_node("flight_agent", flight_agent)
@@ -667,9 +717,11 @@ graph.add_node("itinerary_agent", itinerary_agent)
 graph.add_node("human_approval", human_approval_agent)
 graph.add_node("final_agent", final_agent)
 
+# Entry point: start at supervisor
 graph.add_edge(START, "supervisor")
 graph.add_conditional_edges("supervisor", route_from_supervisor, ROUTE_MAP)
 
+# Dynamic specialist edges: sequentially hop between active agents
 graph.add_conditional_edges(
     "flight_agent", route_after_agent("flight_agent"), ROUTE_MAP
 )
@@ -683,22 +735,25 @@ graph.add_conditional_edges(
     "budget_agent", route_after_agent("budget_agent"), ROUTE_MAP
 )
 
+# Itinerary synthesizes draft -> pauses at human_approval -> polishes at final_agent
 graph.add_edge("itinerary_agent", "human_approval")
 graph.add_edge("human_approval", "final_agent")
 graph.add_edge("final_agent", END)
 graph.add_edge("guardrail_blocked", END)
 
-# =========================
-# PostgreSQL Checkpointer - robust connection lifecycle
-# =========================
+
+# ==============================================================================
+# 9. POSTGRES CHECKPOINTER & EXECUTION LIFECYCLE
+# ==============================================================================
+
 DATABASE_URL = get_database_url()
 travel_graph = graph
 
 
-# =========================
-# FastAPI-facing helpers
-# =========================
 def _interrupt_payload(result: dict[str, Any]) -> dict[str, Any] | None:
+    """
+    Extracts the payload dict from LangGraph's __interrupt__ attribute if the graph paused.
+    """
     interrupts = result.get("__interrupt__", [])
     if not interrupts:
         return None
@@ -712,6 +767,10 @@ def _serialize_result(
     result: dict[str, Any],
     thread_id: str,
 ) -> dict[str, Any]:
+    """
+    Prepares a clean JSON-serializable dictionary for FastAPI HTTP responses.
+    Accurately reflects whether the workflow is paused awaiting human approval.
+    """
     messages = result.get("messages", [])
     last_message = messages[-1].content if messages else ""
     answer = result.get("final_response") or last_message
@@ -752,7 +811,15 @@ def _serialize_result(
 
 
 def run_travel_agent(user_input: str, thread_id: str | None = None):
-    """Start a new travel-planning run and pause at human approval."""
+    """
+    Initiates a new travel-planning workflow.
+    
+    1. Generates or reuses a unique thread_id for conversation state isolation.
+    2. Opens a fresh connection to the PostgreSQL checkpointer.
+    3. Invokes the LangGraph state graph starting at supervisor_agent.
+    4. Automatically pauses at human_approval_agent when interrupt() is encountered.
+    5. Returns the serialized partial state (draft itinerary and requires_approval=True).
+    """
     if not thread_id:
         thread_id = f"user_{uuid.uuid4().hex}"
 
@@ -793,7 +860,15 @@ def resume_travel_agent(
     approved: bool,
     feedback: str = "",
 ):
-    """Resume the paused LangGraph thread after human review."""
+    """
+    Resumes a paused travel-planning workflow after human review.
+    
+    1. Loads the paused state snapshot from PostgreSQL using thread_id.
+    2. Sends Command(resume={"approved": approved, "feedback": feedback}) to unblock interrupt().
+    3. human_approval_agent receives the payload and passes control to final_agent.
+    4. final_agent incorporates feedback or preserves decisions to synthesize the final guide.
+    5. Returns the completed, polished travel plan.
+    """
     if not thread_id:
         raise ValueError("thread_id is required to resume a travel plan.")
 
@@ -818,7 +893,8 @@ def resume_travel_agent(
 
 def get_travel_session(thread_id: str):
     """
-    Retrieves the latest state of a saved travel conversation from PostgreSQL checkpointer.
+    Retrieves the latest state of a saved travel conversation from the PostgreSQL checkpointer.
+    Used by frontend on page load or refresh to seamlessly restore history and active sessions.
     """
     if not thread_id:
         return None
