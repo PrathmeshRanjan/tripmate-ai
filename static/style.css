@@ -744,6 +744,131 @@ kbd {
    PDF Content & Markdown Formatting (Rich Typography)
    ============================================================================== */
 
+/* ==============================================================================
+   Human-in-the-Loop Approval Banner
+   ============================================================================== */
+
+.approval-banner {
+    background: linear-gradient(135deg, rgba(30, 41, 59, 0.95), rgba(15, 23, 42, 0.98));
+    border: 1px solid rgba(245, 158, 11, 0.4);
+    box-shadow: 0 8px 30px rgba(245, 158, 11, 0.12);
+    border-radius: var(--radius-lg);
+    padding: 24px;
+    margin-bottom: 24px;
+    animation: fadeIn 0.3s ease;
+}
+
+.approval-badge-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 12px;
+}
+
+.approval-badge {
+    display: inline-block;
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: #fde047;
+    background: rgba(234, 179, 8, 0.15);
+    border: 1px solid rgba(234, 179, 8, 0.35);
+    padding: 3px 10px;
+    border-radius: var(--radius-pill);
+}
+
+.approval-subtitle {
+    font-size: 0.82rem;
+    color: var(--text-muted);
+}
+
+.approval-banner h3 {
+    font-size: 1.22rem;
+    font-weight: 700;
+    color: #f8fafc;
+    margin-bottom: 6px;
+}
+
+.approval-banner p {
+    color: var(--text-muted);
+    font-size: 0.92rem;
+    line-height: 1.55;
+    margin-bottom: 16px;
+}
+
+.approval-input-row {
+    margin-bottom: 16px;
+}
+
+.feedback-input {
+    width: 100%;
+    padding: 12px 16px;
+    background: rgba(15, 23, 42, 0.8);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+    color: var(--text-main);
+    font-family: var(--font-main);
+    font-size: 0.92rem;
+    outline: none;
+    transition: all 0.2s ease;
+}
+
+.feedback-input:focus {
+    border-color: rgba(245, 158, 11, 0.6);
+    box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.15);
+}
+
+.approval-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+}
+
+.approval-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 11px 20px;
+    border-radius: var(--radius-md);
+    font-size: 0.9rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    border: none;
+}
+
+.approve-btn {
+    background: linear-gradient(135deg, #10b981, #059669);
+    color: #ffffff;
+    box-shadow: 0 4px 14px rgba(16, 185, 129, 0.3);
+}
+
+.approve-btn:hover:not(:disabled) {
+    background: linear-gradient(135deg, #059669, #047857);
+    transform: translateY(-1px);
+    box-shadow: 0 6px 18px rgba(16, 185, 129, 0.4);
+}
+
+.revise-btn {
+    background: rgba(245, 158, 11, 0.15);
+    border: 1px solid rgba(245, 158, 11, 0.4);
+    color: #fde047;
+}
+
+.revise-btn:hover:not(:disabled) {
+    background: rgba(245, 158, 11, 0.25);
+    border-color: rgba(245, 158, 11, 0.6);
+    transform: translateY(-1px);
+}
+
+.approval-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+    transform: none;
+}
+
 .pdf-content {
     background: #ffffff;
     color: #1e293b;

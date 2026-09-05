@@ -16,7 +16,7 @@ from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 
 # Import the core LangGraph multi-agent travel planner execution pipeline
-from backend import run_travel_agent, get_travel_session
+from backend import run_travel_agent, get_travel_session, resume_travel_agent
 
 # Locate the root directory to safely resolve static files and templates
 BASE_DIR = Path(__file__).resolve().parent
@@ -58,6 +58,18 @@ class TravelRequest(BaseModel):
     thread_id: str | None = None
 
 
+class ResumeRequest(BaseModel):
+    """
+    Schema for human-in-the-loop approval or revision requests.
+    - thread_id: The session ID of the paused workflow.
+    - approved: Whether the user approves the draft itinerary.
+    - feedback: Optional revision instructions if changes are desired.
+    """
+    thread_id: str
+    approved: bool = True
+    feedback: str = ""
+
+
 # ==============================================================================
 # 3. ROUTE HANDLERS
 # ==============================================================================
@@ -94,7 +106,7 @@ def travel_planner(request_data: TravelRequest):
                 }
             )
 
-        # Execute the LangGraph travel agent pipeline (Flight -> Hotel -> Weather -> Itinerary -> Final)
+        # Execute the LangGraph travel agent pipeline
         result = run_travel_agent(
             user_input=user_message,
             thread_id=request_data.thread_id
@@ -104,19 +116,55 @@ def travel_planner(request_data: TravelRequest):
         return JSONResponse(
             content={
                 "success": True,
-                "thread_id": result["thread_id"],
-                "answer": result["answer"],
-                "flight_results": result["flight_results"],
-                "hotel_results": result["hotel_results"],
-                "weather_results": result.get("weather_results", ""),
-                "itinerary": result["itinerary"],
-                "llm_calls": result["llm_calls"],
+                **result
             }
         )
 
     except Exception as e:
         # Log stack trace to server console for debugging
         print("ERROR:", e)
+        traceback.print_exc()
+
+        return JSONResponse(
+            status_code=500,
+            content={
+                "success": False,
+                "error": str(e)
+            }
+        )
+
+
+@app.post("/api/travel/resume")
+def resume_planner(request_data: ResumeRequest):
+    """
+    Resumes a paused travel-planning workflow with human approval or revision feedback.
+    """
+    try:
+        thread_id = request_data.thread_id.strip() if request_data.thread_id else ""
+        if not thread_id:
+            return JSONResponse(
+                status_code=400,
+                content={
+                    "success": False,
+                    "error": "thread_id is required to resume a session."
+                }
+            )
+
+        result = resume_travel_agent(
+            thread_id=thread_id,
+            approved=request_data.approved,
+            feedback=request_data.feedback or ""
+        )
+
+        return JSONResponse(
+            content={
+                "success": True,
+                **result
+            }
+        )
+
+    except Exception as e:
+        print("ERROR resuming session:", e)
         traceback.print_exc()
 
         return JSONResponse(

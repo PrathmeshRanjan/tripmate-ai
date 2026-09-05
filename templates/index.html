@@ -138,6 +138,11 @@
                         <div class="step-label">Weather Agent (FastMCP)</div>
                     </div>
                     <div class="step-connector"></div>
+                    <div class="step-item" id="step-budget">
+                        <div class="step-icon">💰</div>
+                        <div class="step-label">Budget Agent</div>
+                    </div>
+                    <div class="step-connector"></div>
                     <div class="step-item" id="step-itinerary">
                         <div class="step-icon">🗺️</div>
                         <div class="step-label">Itinerary Agent</div>
@@ -207,6 +212,36 @@
                             <line x1="12" y1="15" x2="12" y2="3"></line>
                         </svg>
                         <span id="downloadBtnText">Download PDF</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Human-in-the-loop Approval & Revision Box -->
+            <div id="approvalBanner" class="approval-banner hidden">
+                <div class="approval-badge-row">
+                    <span class="approval-badge">Human Review Required</span>
+                    <span id="approvalBadgeSubtitle" class="approval-subtitle">Draft Itinerary Paused</span>
+                </div>
+                <h3 id="approvalTitle">Draft Itinerary Ready for Your Review</h3>
+                <p id="approvalDescription">Review the generated draft itinerary below. You can approve it to synthesize the final plan, or request revisions with custom preferences.</p>
+                
+                <div class="approval-input-row">
+                    <input
+                        type="text"
+                        id="feedbackInput"
+                        class="feedback-input"
+                        placeholder="Optional revision notes (e.g., 'Prefer train journeys', 'Add more downtime on day 3')..."
+                    />
+                </div>
+
+                <div class="approval-actions">
+                    <button id="approveBtn" class="approval-btn approve-btn" onclick="submitApproval(true)">
+                        <span id="approveBtnText">Approve & Finalize Plan</span>
+                        <span id="approveBtnLoader" class="loader hidden"></span>
+                    </button>
+                    <button id="reviseBtn" class="approval-btn revise-btn" onclick="submitApproval(false)">
+                        <span id="reviseBtnText">Request Revision</span>
+                        <span id="reviseBtnLoader" class="loader hidden"></span>
                     </button>
                 </div>
             </div>

@@ -65,7 +65,7 @@ async function restoreSessionFromDatabase(
                 saveTripToHistory(threadId, data.user_query, false);
             }
 
-            showResult(data.answer, data.thread_id, false);
+            showResult(data.answer, data.thread_id, false, data);
             updateThreadDisplay();
 
             if (showToastNotification) {
@@ -312,8 +312,12 @@ function startAgentProgress() {
             text: "🌤️ Weather Agent: Querying live conditions & forecast via FastMCP...",
         },
         {
+            id: "step-budget",
+            text: "💰 Budget Agent: Analyzing expenses, price categories & feasibility...",
+        },
+        {
             id: "step-itinerary",
-            text: "🗺️ Itinerary Agent: Synthesizing day-by-day weather-aware itinerary...",
+            text: "🗺️ Itinerary Agent: Synthesizing day-by-day itinerary...",
         },
         {
             id: "step-final",
@@ -362,6 +366,7 @@ function startAgentProgress() {
         else if (elapsed === 4) updateStep(2);
         else if (elapsed === 6) updateStep(3);
         else if (elapsed === 8) updateStep(4);
+        else if (elapsed === 10) updateStep(5);
     }, 1000);
 }
 
@@ -414,12 +419,14 @@ function hideError() {
     errorBox.classList.add("hidden");
 }
 
-function showResult(answer, threadId, shouldScroll = true) {
+function showResult(answer, threadId, shouldScroll = true, resultData = null) {
     latestAnswerMarkdown = answer;
 
     const resultSection = document.getElementById("resultSection");
     const resultBox = document.getElementById("resultBox");
     const pdfMetaDate = document.getElementById("pdfMetaDate");
+    const approvalBanner = document.getElementById("approvalBanner");
+    const approvalDescription = document.getElementById("approvalDescription");
 
     if (pdfMetaDate) {
         pdfMetaDate.textContent = `Generated: ${new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`;
@@ -429,6 +436,20 @@ function showResult(answer, threadId, shouldScroll = true) {
         resultBox.innerHTML = marked.parse(answer);
     } else {
         resultBox.innerText = answer;
+    }
+
+    // Check if the plan is paused waiting for human review / approval
+    if (resultData && resultData.requires_approval) {
+        if (approvalBanner) {
+            approvalBanner.classList.remove("hidden");
+            if (approvalDescription && resultData.approval_request) {
+                approvalDescription.textContent = resultData.approval_request;
+            }
+        }
+    } else {
+        if (approvalBanner) {
+            approvalBanner.classList.add("hidden");
+        }
     }
 
     updateThreadDisplay();
@@ -486,11 +507,93 @@ async function sendMessage() {
         // Immediately record into history list
         saveTripToHistory(currentThreadId, message);
 
-        showResult(data.answer, data.thread_id, true);
+        showResult(data.answer, data.thread_id, true, data);
     } catch (error) {
         showError(error.message);
     } finally {
         setLoading(false);
+    }
+}
+
+async function submitApproval(approved) {
+    hideError();
+
+    if (!currentThreadId) {
+        showError("No active session thread to resume.");
+        return;
+    }
+
+    const feedbackInput = document.getElementById("feedbackInput");
+    const feedback = feedbackInput ? feedbackInput.value.trim() : "";
+
+    const approveBtn = document.getElementById("approveBtn");
+    const reviseBtn = document.getElementById("reviseBtn");
+    const approveBtnText = document.getElementById("approveBtnText");
+    const reviseBtnText = document.getElementById("reviseBtnText");
+    const approveBtnLoader = document.getElementById("approveBtnLoader");
+    const reviseBtnLoader = document.getElementById("reviseBtnLoader");
+
+    if (approved) {
+        if (approveBtn) approveBtn.disabled = true;
+        if (approveBtnText) approveBtnText.classList.add("hidden");
+        if (approveBtnLoader) approveBtnLoader.classList.remove("hidden");
+    } else {
+        if (reviseBtn) reviseBtn.disabled = true;
+        if (reviseBtnText) reviseBtnText.classList.add("hidden");
+        if (reviseBtnLoader) reviseBtnLoader.classList.remove("hidden");
+    }
+
+    const liveStatusText = document.getElementById("liveStatusText");
+    const agentProgress = document.getElementById("agentProgress");
+    if (agentProgress && liveStatusText) {
+        agentProgress.classList.remove("hidden");
+        liveStatusText.textContent = approved
+            ? "✨ Final Synthesizer: Polishing approved itinerary..."
+            : "✨ Final Synthesizer: Incorporating revision feedback...";
+        const stepFinal = document.getElementById("step-final");
+        if (stepFinal) stepFinal.classList.add("active");
+    }
+
+    try {
+        const response = await fetch("/api/travel/resume", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+                thread_id: currentThreadId,
+                approved: approved,
+                feedback: feedback,
+            }),
+        });
+
+        const data = await response.json();
+
+        if (!response.ok || !data.success) {
+            throw new Error(
+                data.error || "Failed to resume travel plan. Please check server logs.",
+            );
+        }
+
+        showResult(data.answer, data.thread_id, true, data);
+        showToast(
+            approved
+                ? "✨ Itinerary approved and finalized!"
+                : "✏️ Revisions applied to your travel plan!",
+        );
+        if (feedbackInput) feedbackInput.value = "";
+    } catch (error) {
+        showError(error.message);
+    } finally {
+        if (approveBtn) approveBtn.disabled = false;
+        if (approveBtnText) approveBtnText.classList.remove("hidden");
+        if (approveBtnLoader) approveBtnLoader.classList.add("hidden");
+
+        if (reviseBtn) reviseBtn.disabled = false;
+        if (reviseBtnText) reviseBtnText.classList.remove("hidden");
+        if (reviseBtnLoader) reviseBtnLoader.classList.add("hidden");
+
+        stopAgentProgress();
     }
 }
 

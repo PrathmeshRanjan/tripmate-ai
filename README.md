@@ -12,31 +12,24 @@ Voyagent AI is an autonomous, multi-agent travel planning system built with Lang
 
 ## System Architecture
 
-The application implements a directed acyclic graph workflow where state flows sequentially through specialized nodes. Each node queries standardized Model Context Protocol (MCP) servers, updates the shared graph state, and passes context to downstream agents.
+The application implements a directed graph workflow where state is evaluated by a supervisor agent, conditionally routed through specialized specialist nodes, and paused for human review before final synthesis.
 
 ```mermaid
 flowchart TD
     User([User Request]) --> API[FastAPI Endpoint: /api/travel]
-    API --> Checkpointer[PostgreSQL Checkpointer: PostgresSaver]
-    Checkpointer --> FlightAgent[Flight Agent]
+    API --> Supervisor[Supervisor & Input Guardrail]
     
-    subgraph AgentPipeline [LangGraph Multi-Agent Workflow]
-        FlightAgent -->|Flight Routes & Schedules| HotelAgent[Hotel Agent]
-        HotelAgent -->|Accommodations & Pricing| WeatherAgent[Weather Agent]
-        WeatherAgent -->|Live Weather & 5-Day Forecast| ItineraryAgent[Itinerary Agent]
-        ItineraryAgent -->|Daily Activities & Logistics| FinalAgent[Final Synthesizer Agent]
-    end
+    Supervisor -->|Invalid Travel Request| GuardrailBlocked[Guardrail Blocked Node]
+    GuardrailBlocked --> END([End / Return Reason])
     
-    subgraph MCPClient [MultiServerMCPClient Architecture]
-        FlightAgent -.->|stdio transport| MCP_Aviation[AviationStack MCP Server]
-        HotelAgent -.->|streamable_http transport| MCP_Tavily[Tavily Remote MCP Server]
-        WeatherAgent -.->|stdio transport| MCP_Weather[Custom Weather FastMCP Server]
-    end
+    Supervisor -->|Valid Request & Agent Routing| FlightAgent[Flight Agent - MCP]
+    FlightAgent --> HotelAgent[Hotel Agent - MCP]
+    HotelAgent --> WeatherAgent[Weather Agent - FastMCP]
+    WeatherAgent --> BudgetAgent[Budget Agent]
+    BudgetAgent --> ItineraryAgent[Itinerary Agent]
     
-    MCP_Aviation -.->|Flight Data| AviationAPI[AviationStack API]
-    MCP_Tavily -.->|Search Data| TavilyAPI[Tavily Search API]
-    MCP_Weather -.->|Weather & Forecast| OpenWeatherAPI[OpenWeatherMap API]
-    
+    ItineraryAgent -->|Draft Itinerary| HumanApproval[Human-in-the-Loop: interrupt]
+    HumanApproval -->|POST /api/travel/resume| FinalAgent[Final Synthesizer Agent]
     FinalAgent --> StateSave[(PostgreSQL Checkpoint Storage)]
     StateSave --> Response[JSON Response / Markdown Report]
     Response --> UI[Web Interface & PDF Generator]
@@ -44,31 +37,40 @@ flowchart TD
 
 ---
 
-## Specialized Agents
+## Specialized Agents & Workflow
 
-### 1. Flight Agent (`flight_agent`)
-* **Role**: Extracts origin and destination 3-letter IATA codes and the destination city in a single entity-extraction step.
-* **Tool Integration**: Queries the AviationStack MCP server (`list_routes` and `flight_arrival_departure_schedule` via stdio transport) to fetch route connections and airport schedules.
+### 1. Supervisor Agent & Input Guardrail (`supervisor_agent`)
+* **Input Guardrail**: Validates whether requests belong to travel planning. Blocks off-topic or harmful inputs early to conserve LLM tokens.
+* **Dynamic Routing**: Parses user constraints (origin, destination, budget, style) and selects the subset of specialist agents required for the trip.
+
+### 2. Flight Agent (`flight_agent`)
+* **Role**: Resolves origin and destination IATA codes and queries the AviationStack MCP server (`list_routes` and `flight_arrival_departure_schedule` via stdio).
 * **Output**: Extracts route options, airline recommendations, expected durations, and airfare guidance.
 
-### 2. Hotel Agent (`hotel_agent`)
-* **Role**: Evaluates accommodation options matching the user's destination, budget preferences, and group size.
-* **Tool Integration**: Queries the Tavily Remote MCP server (`streamable_http` transport) to gather real-time hotel ratings, neighborhood safety profiles, amenities, and price tiers.
-* **Output**: Curates a list of recommended stays categorized across budget, mid-tier, and premium brackets.
+### 3. Hotel Agent (`hotel_agent`)
+* **Role**: Evaluates accommodations matching destination and budget tiers.
+* **Tool Integration**: Queries the Tavily Remote MCP server (`streamable_http` transport) for hotel ratings, safety, and price ranges.
+* **Output**: Curates recommended stays across budget, mid-tier, and premium brackets.
 
-### 3. Weather Agent (`weather_agent`)
-* **Role**: Retrieves real-time weather metrics and upcoming 5-day forecasts for the destination city.
-* **Tool Integration**: Calls the custom Weather FastMCP server (`weather_custom_mcp_server.py`) over stdio to query OpenWeatherMap endpoints (`get_current_weather` and `get_forecast`).
-* **Output**: Provides current temperature, perceived temperature, humidity, sky condition, wind speed, and multi-day forecast checkpoints.
+### 4. Weather Agent (`weather_agent`)
+* **Role**: Retrieves real-time weather metrics and 5-day forecasts for the destination city.
+* **Tool Integration**: Calls the custom Weather FastMCP server (`weather_custom_mcp_server.py`) over stdio to query OpenWeatherMap endpoints.
+* **Output**: Provides current temperature, sky conditions, wind speed, and multi-day forecast checkpoints.
 
-### 4. Itinerary Agent (`itinerary_agent`)
-* **Role**: Builds an organized, day-by-day itinerary balancing travel pace, geographically grouped attractions, transit times, weather conditions, and meal options.
-* **Context**: Consumes flight timings, hotel base locations, and weather conditions established by preceding agents.
-* **Output**: Generates a detailed schedule with morning, afternoon, and evening breakdowns.
+### 5. Budget Agent (`budget_agent`)
+* **Role**: Analyzes the feasibility of the trip against user budget constraints.
+* **Output**: Identifies cost drivers, budget risk areas, money-saving alternatives, and overall affordability assessments.
 
-### 5. Final Synthesizer Agent (`final_agent`)
-* **Role**: Consolidates all intermediate findings into a cohesive Markdown travel report.
-* **Content**: Includes trip summaries, flight guides, hotel suggestions, weather briefings, day-by-day schedules, estimated budgets, and packing/transit tips.
+### 6. Itinerary Agent (`itinerary_agent`)
+* **Role**: Synthesizes flight timings, hotel base locations, weather forecasts, and budget constraints into a structured draft schedule.
+* **Output**: Emits a draft itinerary prepared for human review.
+
+### 7. Human-in-the-Loop Review (`human_approval_agent`)
+* **Mechanism**: Calls LangGraph's `interrupt()` to pause graph execution and persist state to PostgreSQL.
+* **Action**: Presents the draft plan to the user in the UI, allowing one-click approval or revision with specific feedback via `POST /api/travel/resume`.
+
+### 8. Final Synthesizer Agent (`final_agent`)
+* **Role**: Incorporates human review decisions and feedback into a polished, comprehensive Markdown travel guide with packing tips, schedules, and budgets.
 
 ---
 
@@ -80,6 +82,22 @@ The multi-agent graph operates on a shared typed dictionary (`TravelState`) cont
 class TravelState(TypedDict):
     messages: Annotated[list[AnyMessage], add_messages]
     user_query: str
+
+    # Supervisor & Guardrail state
+    guardrail_allowed: bool
+    guardrail_reason: str
+    selected_agents: list[str]
+    trip_constraints: dict[str, Any]
+    supervisor_reasoning: str
+
+    # Budget & Human-in-the-Loop state
+    budget_results: str
+    approval_request: str
+    approved: bool
+    human_feedback: str
+    final_response: str
+
+    # Travel domain state
     destination_city: str
     flight_results: str
     hotel_results: str
@@ -240,11 +258,38 @@ docker run -d -p 8000:8000 --env-file .env --name voyagent-app voyagent-ai
   {
     "success": true,
     "thread_id": "user_e23a91bc74d84f1a",
-    "answer": "# Tokyo Itinerary...",
+    "answer": "# Draft Tokyo Itinerary...",
+    "requires_approval": true,
+    "approval_request": "Please review the generated draft itinerary...",
     "flight_results": "...",
     "hotel_results": "...",
+    "weather_results": "...",
+    "budget_results": "...",
     "itinerary": "...",
-    "llm_calls": 4
+    "llm_calls": 5
+  }
+  ```
+
+### 2. Resume / Approve Travel Plan (HITL)
+* **Endpoint**: `POST /api/travel/resume`
+* **Content-Type**: `application/json`
+* **Request Body**:
+  ```json
+  {
+    "thread_id": "user_e23a91bc74d84f1a",
+    "approved": true,
+    "feedback": "Optional revision notes or preferences"
+  }
+  ```
+* **Response**:
+  ```json
+  {
+    "success": true,
+    "thread_id": "user_e23a91bc74d84f1a",
+    "answer": "# Final Polished Tokyo Guide...",
+    "requires_approval": false,
+    "approved": true,
+    "final_response": "..."
   }
   ```
 
