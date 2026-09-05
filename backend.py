@@ -4,8 +4,6 @@ from typing import TypedDict, Annotated, Any
 import uuid
 import asyncio
 import json
-import psycopg
-from psycopg.rows import dict_row
 from langgraph.graph import StateGraph, START, END
 from langgraph.graph.message import add_messages
 from langgraph.checkpoint.postgres import PostgresSaver
