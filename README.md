@@ -12,97 +12,145 @@ Voyagent AI is an autonomous, multi-agent travel planning system built with Lang
 
 ## System Architecture
 
-The application implements a directed graph workflow where state is evaluated by a supervisor agent, conditionally routed through specialized specialist nodes, and paused for human review before final synthesis.
+The application implements a directed state graph workflow where incoming queries are validated by a supervisor agent, conditionally routed through active specialist nodes, and paused for human inspection. Users can request revisions across multiple cycles before final synthesis.
 
 ```mermaid
 flowchart TD
-    User([User Request]) --> API[FastAPI Endpoint: /api/travel]
-    API --> Supervisor[Supervisor & Input Guardrail]
+    User([User Request]) --> API[FastAPI: POST /api/travel]
+    API --> Supervisor[Supervisor Agent & Guardrail]
     
     Supervisor -->|Invalid Travel Request| GuardrailBlocked[Guardrail Blocked Node]
-    GuardrailBlocked --> END([End / Return Reason])
+    GuardrailBlocked --> END([End / Return Rejection])
     
-    Supervisor -->|Valid Request & Agent Routing| FlightAgent[Flight Agent - MCP]
-    FlightAgent --> HotelAgent[Hotel Agent - MCP]
-    HotelAgent --> WeatherAgent[Weather Agent - FastMCP]
-    WeatherAgent --> BudgetAgent[Budget Agent]
-    BudgetAgent --> ItineraryAgent[Itinerary Agent]
+    Supervisor -->|Valid Request & Dynamic Routing| Specialists{Dynamic Specialist Routing}
     
-    ItineraryAgent -->|Draft Itinerary| HumanApproval[Human-in-the-Loop: interrupt]
-    HumanApproval -->|POST /api/travel/resume| FinalAgent[Final Synthesizer Agent]
+    Specialists -.-> FlightAgent[Flight Agent - AviationStack MCP]
+    Specialists -.-> HotelAgent[Hotel Agent - Tavily Search MCP]
+    Specialists -.-> WeatherAgent[Weather Agent - FastMCP Server]
+    Specialists -.-> BudgetAgent[Budget Feasibility Agent]
+    
+    FlightAgent -.-> HotelAgent
+    HotelAgent -.-> WeatherAgent
+    WeatherAgent -.-> BudgetAgent
+    BudgetAgent -.-> ItineraryAgent[Itinerary Agent]
+    
+    ItineraryAgent -->|Draft Itinerary| HumanApproval[Human-in-the-Loop Checkpoint: interrupt]
+    
+    HumanApproval -->|POST /api/travel/resume: approved=False| RevisionAgent[Revision Agent]
+    RevisionAgent -->|Updated Draft Itinerary| HumanApproval
+    
+    HumanApproval -->|POST /api/travel/resume: approved=True| FinalAgent[Final Synthesizer Agent]
     FinalAgent --> StateSave[(PostgreSQL Checkpoint Storage)]
-    StateSave --> Response[JSON Response / Markdown Report]
-    Response --> UI[Web Interface & PDF Generator]
+    StateSave --> END
 ```
 
 ---
 
-## Specialized Agents & Workflow
+## Specialized Agents & Workflow Lifecycle
 
 ### 1. Supervisor Agent & Input Guardrail (`supervisor_agent`)
-* **Input Guardrail**: Validates whether requests belong to travel planning. Blocks off-topic or harmful inputs early to conserve LLM tokens.
-* **Dynamic Routing**: Parses user constraints (origin, destination, budget, style) and selects the subset of specialist agents required for the trip.
+* **Input Guardrail**: Evaluates whether incoming requests are legitimate travel planning queries. Off-topic, harmful, or adversarial prompts are rejected early to conserve LLM tokens and execution resources.
+* **Constraint Extraction**: Extracts structured parameters including origin city, destination city, trip duration, budget bracket, passenger counts, and travel preferences.
+* **Dynamic Agent Selection**: Identifies which specialist agents are strictly required for the query and populates `state["selected_agents"]`.
 
 ### 2. Flight Agent (`flight_agent`)
-* **Role**: Resolves origin and destination IATA codes and queries the AviationStack MCP server (`list_routes` and `flight_arrival_departure_schedule` via stdio).
-* **Output**: Extracts route options, airline recommendations, expected durations, and airfare guidance.
+* **Role**: Resolves origin and destination airport IATA codes and queries flight schedules.
+* **Tool Integration**: Connects to the AviationStack MCP server over stdio to query `list_routes` and `flight_arrival_departure_schedule`.
+* **Output**: Extracts viable flight routes, airline options, transit durations, and travel advice.
 
 ### 3. Hotel Agent (`hotel_agent`)
-* **Role**: Evaluates accommodations matching destination and budget tiers.
-* **Tool Integration**: Queries the Tavily Remote MCP server (`streamable_http` transport) for hotel ratings, safety, and price ranges.
-* **Output**: Curates recommended stays across budget, mid-tier, and premium brackets.
+* **Role**: Researches accommodations suited to the destination, group style, and budget constraints.
+* **Tool Integration**: Connects to the Tavily Remote MCP server using HTTP transport (`streamable_http`) for accommodation availability, neighborhood safety, and guest ratings.
+* **Output**: Delivers categorized stay recommendations across budget, mid-range, and premium tiers.
 
 ### 4. Weather Agent (`weather_agent`)
-* **Role**: Retrieves real-time weather metrics and 5-day forecasts for the destination city.
-* **Tool Integration**: Calls the custom Weather FastMCP server (`weather_custom_mcp_server.py`) over stdio to query OpenWeatherMap endpoints.
-* **Output**: Provides current temperature, sky conditions, wind speed, and multi-day forecast checkpoints.
+* **Role**: Retrieves real-time weather conditions and multi-day meteorological forecasts.
+* **Tool Integration**: Invokes a custom FastMCP weather server (`weather_custom_mcp_server.py`) over stdio that queries OpenWeatherMap endpoints.
+* **Output**: Reports temperature, precipitation risk, wind speed, and weather-specific packing recommendations.
 
 ### 5. Budget Agent (`budget_agent`)
-* **Role**: Analyzes the feasibility of the trip against user budget constraints.
-* **Output**: Identifies cost drivers, budget risk areas, money-saving alternatives, and overall affordability assessments.
+* **Role**: Evaluates the economic feasibility of the requested itinerary.
+* **Output**: Provides categorized cost estimates (flights, accommodations, dining, activities, local transit), flags budget risk areas, and suggests cost-saving alternatives.
 
 ### 6. Itinerary Agent (`itinerary_agent`)
-* **Role**: Synthesizes flight timings, hotel base locations, weather forecasts, and budget constraints into a structured draft schedule.
-* **Output**: Emits a draft itinerary prepared for human review.
+* **Role**: Consolidates findings from active specialists into a day-by-day draft schedule.
+* **Output**: Emits a structured draft itinerary ready for human inspection.
 
-### 7. Human-in-the-Loop Review (`human_approval_agent`)
-* **Mechanism**: Calls LangGraph's `interrupt()` to pause graph execution and persist state to PostgreSQL.
-* **Action**: Presents the draft plan to the user in the UI, allowing one-click approval or revision with specific feedback via `POST /api/travel/resume`.
+### 7. Human-in-the-Loop Review Node (`human_approval_agent`)
+* **Mechanism**: Calls LangGraph's `interrupt()` function to suspend workflow execution and persist state to PostgreSQL.
+* **Action**: Returns the draft itinerary and pauses until the user submits feedback or approval via `POST /api/travel/resume`.
 
-### 8. Final Synthesizer Agent (`final_agent`)
-* **Role**: Incorporates human review decisions and feedback into a polished, comprehensive Markdown travel guide with packing tips, schedules, and budgets.
+### 8. Revision Agent (`revision_agent`)
+* **Mechanism**: Triggered when the human reviewer requests modifications (`approved = False`).
+* **Role**: Ingests specific user feedback, applies modifications to the draft itinerary, and cycles back to `human_approval_agent` for re-inspection.
+* **Iterative Loop**: Allows users to refine the plan over multiple revision turns until fully satisfied.
+
+### 9. Final Synthesizer Agent (`final_agent`)
+* **Role**: Triggered once the human approves the plan (`approved = True`).
+* **Output**: Formulates the final comprehensive travel document with trip summary, transit details, hotel suggestions, daily activities, weather packing advice, and final recommendations.
+
+### 10. Guardrail Blocked Node (`guardrail_blocked_agent`)
+* **Role**: Handles off-topic or prohibited queries, returning an explanation and terminating immediately at `END`.
 
 ---
 
-## State Management and Persistence
+## Dynamic Topological Routing Mechanics
 
-The multi-agent graph operates on a shared typed dictionary (`TravelState`) containing:
+Rather than enforcing a static pipeline where every agent must execute regardless of user intent, Voyagent uses dynamic topological dispatching:
+
+```python
+AGENT_ORDER = [
+    "flight_agent",
+    "hotel_agent",
+    "weather_agent",
+    "budget_agent",
+    "itinerary_agent",
+]
+
+ROUTE_MAP = {
+    "guardrail_blocked": "guardrail_blocked",
+    "flight_agent": "flight_agent",
+    "hotel_agent": "hotel_agent",
+    "weather_agent": "weather_agent",
+    "budget_agent": "budget_agent",
+    "itinerary_agent": "itinerary_agent",
+}
+```
+
+* **Higher-Order Edge Router (`route_after_agent`)**: Generates a conditional routing closure that inspects `state["selected_agents"]` and skips inactive specialists directly to the next active agent.
+* **Approval Router (`route_after_approval`)**: Directs execution to `final_agent` upon approval, or to `revision_agent` upon revision request, enabling multi-round feedback loops.
+
+---
+
+## State Schema and Database Persistence
+
+### Unified State Schema (`TravelState`)
 
 ```python
 class TravelState(TypedDict):
     messages: Annotated[list[AnyMessage], add_messages]
     user_query: str
 
-    # Supervisor & Guardrail state
+    # Supervisor & Input Guardrail outputs
     guardrail_allowed: bool
     guardrail_reason: str
     selected_agents: list[str]
     trip_constraints: dict[str, Any]
     supervisor_reasoning: str
 
-    # Budget & Human-in-the-Loop state
-    budget_results: str
-    approval_request: str
-    approved: bool
-    human_feedback: str
-    final_response: str
-
-    # Travel domain state
+    # Specialist Agent outputs
     destination_city: str
     flight_results: str
     hotel_results: str
     weather_results: str
+    budget_results: str
     itinerary: str
+
+    # Human-in-the-Loop (HITL) approval & revision state
+    approval_request: str
+    approved: bool
+    human_feedback: str
+    final_response: str
     llm_calls: int
 ```
 
@@ -270,46 +318,71 @@ docker run -d -p 8000:8000 --env-file .env --name voyagent-app voyagent-ai
   }
   ```
 
-### 2. Resume / Approve Travel Plan (HITL)
+### 2. Resume / Approve Travel Plan (Human-in-the-Loop)
 * **Endpoint**: `POST /api/travel/resume`
 * **Content-Type**: `application/json`
+
+**Case A: Request Revisions (`approved: false`)**
+* **Request Body**:
+  ```json
+  {
+    "thread_id": "user_e23a91bc74d84f1a",
+    "approved": false,
+    "feedback": "Prefer boutique traditional ryokans and add a day trip to Mount Fuji."
+  }
+  ```
+* **Response (Updated Draft, Paused Again)**:
+  ```json
+  {
+    "success": true,
+    "thread_id": "user_e23a91bc74d84f1a",
+    "answer": "# Revised Tokyo Itinerary with Mount Fuji...",
+    "requires_approval": true,
+    "approval_request": "Revision applied: 'Prefer boutique traditional ryokans and add a day trip to Mount Fuji.'. Please review the updated draft.",
+    "itinerary": "..."
+  }
+  ```
+
+**Case B: Approve Itinerary (`approved: true`)**
 * **Request Body**:
   ```json
   {
     "thread_id": "user_e23a91bc74d84f1a",
     "approved": true,
-    "feedback": "Optional revision notes or preferences"
+    "feedback": ""
   }
   ```
-* **Response**:
+* **Response (Finalized Plan)**:
   ```json
   {
     "success": true,
     "thread_id": "user_e23a91bc74d84f1a",
-    "answer": "# Final Polished Tokyo Guide...",
+    "answer": "# Final Tokyo Travel Guide...",
     "requires_approval": false,
     "approved": true,
     "final_response": "..."
   }
   ```
 
-### 2. Retrieve Saved Session
+### 3. Retrieve Saved Session
 * **Endpoint**: `GET /api/travel/session/{thread_id}`
 * **Response**:
   ```json
   {
     "success": true,
     "thread_id": "user_e23a91bc74d84f1a",
-    "user_query": "Plan a 5-day trip to Tokyo from New Delhi in October",
-    "answer": "# Tokyo Itinerary...",
+    "user_query": "Plan a 7-day trip to Tokyo from New Delhi in October under $2500",
+    "answer": "# Draft or Final Plan...",
+    "requires_approval": true,
     "flight_results": "...",
     "hotel_results": "...",
-    "itinerary": "...",
-    "llm_calls": 4
+    "weather_results": "...",
+    "budget_results": "...",
+    "itinerary": "..."
   }
   ```
 
-### 3. Health Check
+### 4. Health Check
 * **Endpoint**: `GET /health`
 * **Response**:
   ```json

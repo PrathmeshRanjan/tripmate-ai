@@ -64,7 +64,7 @@
         <!-- Hero Section -->
         <section class="hero-section">
             <div class="badge">
-                <span class="sparkle">✨</span> Model Context Protocol (MCP) Multi-Agent Architecture
+                Model Context Protocol (MCP) Multi-Agent Architecture
             </div>
 
             <h1>
@@ -73,8 +73,39 @@
             </h1>
 
             <p>
-                Voyagent coordinates specialized agents over Model Context Protocol (MCP) for real-time flight routes, hotel discovery, live weather forecasting, and personalized itineraries with database persistence.
+                Voyagent coordinates specialized agents over Model Context Protocol (MCP) for real-time flight routes, hotel discovery, live weather forecasting, budget feasibility analysis, and personalized itineraries with database persistence and iterative human review.
             </p>
+
+            <div class="mcp-badges-row">
+                <div class="mcp-chip">
+                    <span class="mcp-chip-dot"></span>
+                    <span>Supervisor & Guardrails</span>
+                </div>
+                <div class="mcp-chip">
+                    <span class="mcp-chip-dot"></span>
+                    <span>AviationStack MCP (Flights)</span>
+                </div>
+                <div class="mcp-chip">
+                    <span class="mcp-chip-dot"></span>
+                    <span>Tavily Search MCP (Hotels)</span>
+                </div>
+                <div class="mcp-chip">
+                    <span class="mcp-chip-dot"></span>
+                    <span>FastMCP Server (Weather)</span>
+                </div>
+                <div class="mcp-chip">
+                    <span class="mcp-chip-dot"></span>
+                    <span>Budget Feasibility Agent</span>
+                </div>
+                <div class="mcp-chip">
+                    <span class="mcp-chip-dot"></span>
+                    <span>Multi-Turn Human Review Loop</span>
+                </div>
+                <div class="mcp-chip">
+                    <span class="mcp-chip-dot"></span>
+                    <span>PostgreSQL Checkpointer</span>
+                </div>
+            </div>
         </section>
 
         <!-- Planner Card / Input Area -->
@@ -99,7 +130,7 @@
 
                 <div class="input-footer">
                     <div class="input-hints">
-                        <span>💡 Tip: Press <kbd>Ctrl</kbd> + <kbd>Enter</kbd> to submit</span>
+                        <span>Tip: Press <kbd>Ctrl</kbd> + <kbd>Enter</kbd> to submit</span>
                     </div>
 
                     <div class="button-group">
@@ -125,17 +156,17 @@
                 <div class="agent-steps">
                     <div class="step-item" id="step-flight">
                         <div class="step-icon">✈️</div>
-                        <div class="step-label">Flight Agent (MCP)</div>
+                        <div class="step-label">Flight Agent</div>
                     </div>
                     <div class="step-connector"></div>
                     <div class="step-item" id="step-hotel">
                         <div class="step-icon">🏨</div>
-                        <div class="step-label">Hotel Agent (MCP)</div>
+                        <div class="step-label">Hotel Agent</div>
                     </div>
                     <div class="step-connector"></div>
                     <div class="step-item" id="step-weather">
                         <div class="step-icon">🌤️</div>
-                        <div class="step-label">Weather Agent (FastMCP)</div>
+                        <div class="step-label">Weather Agent</div>
                     </div>
                     <div class="step-connector"></div>
                     <div class="step-item" id="step-budget">
@@ -148,13 +179,18 @@
                         <div class="step-label">Itinerary Agent</div>
                     </div>
                     <div class="step-connector"></div>
+                    <div class="step-item" id="step-review">
+                        <div class="step-icon">🔄</div>
+                        <div class="step-label">Review Loop</div>
+                    </div>
+                    <div class="step-connector"></div>
                     <div class="step-item" id="step-final">
                         <div class="step-icon">✨</div>
                         <div class="step-label">Final Guide</div>
                     </div>
                 </div>
                 <div class="live-status-text" id="liveStatusText">
-                    🚀 Dispatching MCP autonomous agents...
+                    Dispatching autonomous agents...
                 </div>
             </div>
 
@@ -220,17 +256,17 @@
             <div id="approvalBanner" class="approval-banner hidden">
                 <div class="approval-badge-row">
                     <span class="approval-badge">Human Review Required</span>
-                    <span id="approvalBadgeSubtitle" class="approval-subtitle">Draft Itinerary Paused</span>
+                    <span id="approvalBadgeSubtitle" class="approval-subtitle">Iterative Draft Review</span>
                 </div>
                 <h3 id="approvalTitle">Draft Itinerary Ready for Your Review</h3>
-                <p id="approvalDescription">Review the generated draft itinerary below. You can approve it to synthesize the final plan, or request revisions with custom preferences.</p>
+                <p id="approvalDescription">Review the generated draft itinerary below. You can approve it to synthesize the final plan, or request revisions. You can iterate through multiple review rounds until satisfied.</p>
                 
                 <div class="approval-input-row">
                     <input
                         type="text"
                         id="feedbackInput"
                         class="feedback-input"
-                        placeholder="Optional revision notes (e.g., 'Prefer train journeys', 'Add more downtime on day 3')..."
+                        placeholder="Specify any changes (e.g., 'Prefer train journeys', 'Add more downtime on day 3', 'Reduce budget')..."
                     />
                 </div>
 
@@ -287,7 +323,7 @@
     <!-- Footer -->
     <footer class="app-footer">
         <div class="footer-content">
-            <p>Built with <strong>FastAPI</strong>, <strong>LangGraph Multi-Agent</strong>, <strong>PostgreSQL</strong>, <strong>Tavily Search</strong>, and <strong>AviationStack</strong>.</p>
+            <p>Built with <strong>FastAPI</strong>, <strong>LangGraph Multi-Agent</strong>, <strong>PostgreSQL Checkpointer</strong>, <strong>FastMCP</strong>, <strong>Tavily Search</strong>, and <strong>AviationStack</strong>.</p>
         </div>
     </footer>
 

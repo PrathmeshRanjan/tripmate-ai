@@ -69,7 +69,7 @@ async function restoreSessionFromDatabase(
             updateThreadDisplay();
 
             if (showToastNotification) {
-                showToast("📖 Restored trip plan from database!");
+                showToast("Restored trip plan from database.");
             }
         }
     } catch (err) {
@@ -225,7 +225,7 @@ function deleteHistoryTrip(threadId, event) {
         document.getElementById("resultSection").classList.add("hidden");
     }
 
-    showToast("🗑️ Trip removed from history.");
+    showToast("Trip removed from history.");
 }
 
 function clearAllHistory() {
@@ -241,7 +241,7 @@ function clearAllHistory() {
     document.getElementById("resultSection").classList.add("hidden");
     clearInput();
     closeHistoryDrawer();
-    showToast("✨ Cleared all trip history.");
+    showToast("Cleared all trip history.");
 }
 
 function escapeHtml(text) {
@@ -264,9 +264,7 @@ function resetSession() {
     // Hide active result & errors on main view
     document.getElementById("resultSection").classList.add("hidden");
     hideError();
-    showToast(
-        "✨ Ready for a new trip! Your past plans are safe in Trip History.",
-    );
+    showToast("Ready for a new trip. Past plans remain in Trip History.");
 }
 
 function setPrompt(text) {
@@ -301,27 +299,31 @@ function startAgentProgress() {
     const steps = [
         {
             id: "step-flight",
-            text: "✈️ Flight Agent: Scanning routes & schedules via AviationStack MCP...",
+            text: "Flight Agent: Scanning routes and schedules via AviationStack MCP...",
         },
         {
             id: "step-hotel",
-            text: "🏨 Hotel Agent: Discovering accommodations via Tavily MCP...",
+            text: "Hotel Agent: Discovering accommodations via Tavily MCP...",
         },
         {
             id: "step-weather",
-            text: "🌤️ Weather Agent: Querying live conditions & forecast via FastMCP...",
+            text: "Weather Agent: Querying conditions and forecast via FastMCP...",
         },
         {
             id: "step-budget",
-            text: "💰 Budget Agent: Analyzing expenses, price categories & feasibility...",
+            text: "Budget Agent: Analyzing expenses, price categories and feasibility...",
         },
         {
             id: "step-itinerary",
-            text: "🗺️ Itinerary Agent: Synthesizing day-by-day itinerary...",
+            text: "Itinerary Agent: Synthesizing day-by-day itinerary...",
+        },
+        {
+            id: "step-review",
+            text: "Human Review: Preparing draft itinerary for user review...",
         },
         {
             id: "step-final",
-            text: "✨ Final Synthesizer: Polishing recommendations, packing & budget...",
+            text: "Final Synthesizer: Finalizing recommendations, packing and budget...",
         },
     ];
 
@@ -367,6 +369,7 @@ function startAgentProgress() {
         else if (elapsed === 6) updateStep(3);
         else if (elapsed === 8) updateStep(4);
         else if (elapsed === 10) updateStep(5);
+        else if (elapsed === 12) updateStep(6);
     }, 1000);
 }
 
@@ -548,10 +551,23 @@ async function submitApproval(approved) {
     if (agentProgress && liveStatusText) {
         agentProgress.classList.remove("hidden");
         liveStatusText.textContent = approved
-            ? "✨ Final Synthesizer: Polishing approved itinerary..."
-            : "✏️ Revision Agent: Applying your feedback to draft...";
+            ? "Final Synthesizer: Polishing approved itinerary..."
+            : "Revision Agent: Applying your feedback to draft...";
         const stepFinal = document.getElementById("step-final");
-        if (stepFinal) stepFinal.classList.add("active");
+        const stepReview = document.getElementById("step-review");
+        if (approved) {
+            if (stepReview) {
+                stepReview.classList.remove("active");
+                stepReview.classList.add("completed");
+            }
+            if (stepFinal) stepFinal.classList.add("active");
+        } else {
+            if (stepReview) {
+                stepReview.classList.add("active");
+                stepReview.classList.remove("completed");
+            }
+            if (stepFinal) stepFinal.classList.remove("active");
+        }
     }
 
     try {
@@ -579,8 +595,8 @@ async function submitApproval(approved) {
         showResult(data.answer, data.thread_id, true, data);
         showToast(
             approved
-                ? "✨ Itinerary approved and finalized!"
-                : "✏️ Draft updated with your revisions! Please review.",
+                ? "Itinerary approved and finalized."
+                : "Draft updated with your revisions. Please review.",
         );
         if (feedbackInput) feedbackInput.value = "";
     } catch (error) {
@@ -613,7 +629,7 @@ function copyResult() {
                 : "Copy Markdown";
 
             if (copyBtnText) copyBtnText.textContent = "Copied!";
-            showToast("📋 Markdown copied to clipboard!");
+            showToast("Markdown copied to clipboard.");
 
             setTimeout(() => {
                 if (copyBtnText) copyBtnText.textContent = oldText;
@@ -667,7 +683,7 @@ function downloadPDF() {
         .save()
         .then(() => {
             if (downloadBtnText) downloadBtnText.textContent = oldText;
-            showToast("📄 PDF downloaded successfully!");
+            showToast("PDF downloaded successfully.");
         })
         .catch(() => {
             if (downloadBtnText) downloadBtnText.textContent = oldText;
